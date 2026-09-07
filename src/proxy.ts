@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isPlatformHostname, normalizeHostname, tenantSlugFromHostname } from "@/lib/hostnames";
 
 const PUBLIC_TENANT_PATHS = new Set(["/", "/cuenta", "/mi-cuenta", "/registro", "/payment"]);
-const TENANT_ADMIN_PREFIXES = ["/agenda", "/clientes", "/configuracion", "/disponibilidad", "/onboarding"];
+const TENANT_ADMIN_PREFIXES = ["/agenda", "/clientes", "/configuracion", "/disponibilidad", "/sesiones", "/onboarding"];
 
 function tenantAdminInternalPath(pathname: string): string | null {
   if (pathname === "/dashboard") return "/app";
