@@ -7,6 +7,7 @@ const TENANT_ADMIN_PREFIXES = [
   "/clientes",
   "/configurar",
   "/configuracion",
+  "/estructura",
   "/apariencia",
   "/disponibilidad",
   "/sesiones",
