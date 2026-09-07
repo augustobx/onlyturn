@@ -11,6 +11,7 @@ const TENANT_ADMIN_PREFIXES = [
   "/recurrencias",
   "/lista-espera",
   "/extras",
+  "/paquetes",
   "/politicas",
   "/automatizaciones",
   "/calendario",
