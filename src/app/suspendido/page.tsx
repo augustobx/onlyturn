@@ -1,13 +1,15 @@
 import { CalendarCheck2, ShieldAlert } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
-import { findTenantOwnership, getRequestHostname, tenantHasOperationalAccess } from "@/lib/tenant-context";
+import { findTenantOwnership, getRequestHostname } from "@/lib/tenant-context";
+import { reconcileTenantMembership } from "@/lib/membership";
 
 export default async function SuspendedPage() {
   const hostname = await getRequestHostname();
   const tenant = await findTenantOwnership(hostname);
 
   if (!tenant || tenant.isPlatform) notFound();
-  if (tenantHasOperationalAccess(tenant)) redirect("/");
+  const access = await reconcileTenantMembership(tenant.id);
+  if (access?.allowed) redirect("/");
 
   return <main className="login-page">
     <section className="login-visual">
@@ -23,7 +25,7 @@ export default async function SuspendedPage() {
       <div className="form-card">
         <ShieldAlert size={34} />
         <h2>Servicio suspendido</h2>
-        <p className="muted">La cuenta no tiene acceso operativo en este momento. El administrador del negocio debe comunicarse con NanoLabs para regularizar el servicio.</p>
+        <p className="muted">La membresía de este negocio está vencida o suspendida. Para regularizar el servicio, comunicate con NanoLabs.</p>
       </div>
     </section>
   </main>;
