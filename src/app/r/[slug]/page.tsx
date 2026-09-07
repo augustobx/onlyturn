@@ -7,14 +7,13 @@ import { AnnouncementBoard } from "./announcement-board";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { platformDb } from "@/lib/db";
 import { getCustomerUsablePackages } from "@/lib/packages";
-
-type Branding = { primaryColor?: string; description?: string; logoUrl?: string; coverUrl?: string; splashUrl?: string };
+import { resolvePublicTheme, type PublicBranding } from "@/lib/public-themes";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const tenant = await getPublicTenant(slug);
   if (!tenant) return {};
-  const branding = tenant.branding as Branding;
+  const branding = tenant.branding as PublicBranding;
   return {
     title: `Reservar en ${tenant.name}`,
     description: branding.description ?? `Reservá tu turno online en ${tenant.name}`,
@@ -38,13 +37,27 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
     getCustomerSession(tenant.id),
   ]);
   const customerPackages = customerSession ? await getCustomerUsablePackages(tenant.id, customerSession.account.customerId) : [];
-  const branding = tenant.branding as Branding;
+  const branding = tenant.branding as PublicBranding;
+  const publicTheme = resolvePublicTheme(branding);
   const settings = tenant.settings as { cancellationHours?: number };
 
   return <main
     className="booking-page booking-page-v2"
+    data-theme={publicTheme.id}
+    data-theme-mode={publicTheme.dark ? "dark" : "light"}
     style={{
-      "--brand": branding.primaryColor ?? "#2563eb",
+      "--brand": publicTheme.primary,
+      "--public-secondary": publicTheme.secondary,
+      "--public-bg": publicTheme.background,
+      "--public-surface": publicTheme.surface,
+      "--public-text": publicTheme.text,
+      "--public-muted": publicTheme.muted,
+      "--public-line": publicTheme.line,
+      "--public-soft": publicTheme.soft,
+      "--public-radius": `${publicTheme.radius}px`,
+      "--public-shadow": publicTheme.shadow,
+      "--public-hero-from": publicTheme.heroFrom,
+      "--public-hero-to": publicTheme.heroTo,
       "--public-cover": branding.coverUrl ? `url(${branding.coverUrl})` : branding.splashUrl ? `url(${branding.splashUrl})` : "none",
     } as React.CSSProperties}
   >
