@@ -25,7 +25,11 @@ const tenantLinks = [
   { href: "/configuracion", internal: "/app/configuracion", label: "Configuración", icon: Settings },
 ];
 
-const platformLinks = [{ href: "/superadmin", internal: "/superadmin", label: "Plataforma", icon: ShieldCheck }];
+const platformLinks = [
+  { href: "/superadmin", internal: "/superadmin", label: "Resumen", icon: ShieldCheck },
+  { href: "/superadmin/tenants", internal: "/superadmin/tenants", label: "Tenants", icon: Users },
+  { href: "/superadmin/planes", internal: "/superadmin/planes", label: "Planes", icon: BriefcaseBusiness },
+];
 
 export function AppShell({
   children,
@@ -43,13 +47,14 @@ export function AppShell({
   const links = superAdmin ? platformLinks : tenantLinks;
 
   const isActive = (href: string, internal: string) => {
+    if (superAdmin && href === "/superadmin") return pathname === "/superadmin";
     const publicMatch = href === "/dashboard" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
     const internalMatch = internal === "/app" ? pathname === internal : pathname === internal || pathname.startsWith(`${internal}/`);
     return publicMatch || internalMatch;
   };
 
   return (
-    <div className="shell nanolabs-shell">
+    <div className={`shell nanolabs-shell ${superAdmin ? "platform-shell" : "tenant-shell"}`}>
       {open && <button className="sidebar-backdrop" aria-label="Cerrar menú" onClick={() => setOpen(false)} />}
       <aside className={`sidebar ${open ? "is-open" : ""}`}>
         <div className="brand brand-onlyturn">
