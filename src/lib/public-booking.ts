@@ -43,6 +43,18 @@ type AddonSnapshot = {
   preparationMinutes: number;
 };
 
+type TimedService = {
+  id: string;
+  assignmentStrategy: "CLIENT_CHOOSES" | "ANY_AVAILABLE" | "ROUND_ROBIN" | "MANUAL";
+  durationMinutes: number;
+  preparationMinutes: number;
+  bufferMinutes: number;
+  professionalMode: "NONE" | "OPTIONAL" | "REQUIRED";
+  resourceMode: "NONE" | "OPTIONAL" | "REQUIRED";
+  professionals: { professionalId: string }[];
+  resources: { resourceId: string }[];
+};
+
 function customFieldValueIsEmpty(value: unknown) {
   return value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
 }
@@ -218,16 +230,7 @@ async function createPublicTimedBooking({
 }: {
   tenantId: string;
   customerId: string;
-  service: {
-    id: string;
-    durationMinutes: number;
-    preparationMinutes: number;
-    bufferMinutes: number;
-    professionalMode: "NONE" | "OPTIONAL" | "REQUIRED";
-    resourceMode: "NONE" | "OPTIONAL" | "REQUIRED";
-    professionals: { professionalId: string }[];
-    resources: { resourceId: string }[];
-  };
+  service: TimedService;
   input: z.infer<typeof publicBookingSchema>;
   publicTokenHash: string;
   priceCents: number | null;
@@ -238,23 +241,20 @@ async function createPublicTimedBooking({
   timezone: string;
 }) {
   if (!input.startsAt) throw new Error("Elegí un horario");
-  if (input.professionalId && !service.professionals.some((item) => item.professionalId === input.professionalId)) throw new Error("Profesional no habilitado para este servicio");
-  if (input.resourceId && !service.resources.some((item) => item.resourceId === input.resourceId)) throw new Error("Recurso no habilitado para este servicio");
-  if (service.professionalMode === "REQUIRED" && !input.professionalId) throw new Error("Seleccioná un profesional");
-  if (service.resourceMode === "REQUIRED" && !input.resourceId) throw new Error("Seleccioná un recurso");
+  const startsAt = new Date(input.startsAt);
+  const date = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(startsAt);
+  const resolved = await resolveTimedAssignments({ tenantId, locationId: input.locationId, service, input, startsAt, date });
 
   const addonDuration = addons.reduce((sum, addon) => sum + addon.durationMinutes, 0);
   const addonPreparation = addons.reduce((sum, addon) => sum + addon.preparationMinutes, 0);
   const effectiveDurationMinutes = service.durationMinutes + addonDuration;
   const effectivePreparationMinutes = service.preparationMinutes + addonPreparation;
-  const startsAt = new Date(input.startsAt);
-  const date = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(startsAt);
   const slots = await getAvailableSlots({
     tenantId,
     locationId: input.locationId,
     serviceId: input.serviceId,
-    professionalId: input.professionalId,
-    resourceId: input.resourceId,
+    professionalId: resolved.professionalId,
+    resourceId: resolved.resourceId,
     addonIds: input.addonIds,
     date,
   });
@@ -268,8 +268,8 @@ async function createPublicTimedBooking({
         locationId: input.locationId,
         serviceId: service.id,
         customerId,
-        professionalId: input.professionalId || null,
-        resourceId: input.resourceId || null,
+        professionalId: resolved.professionalId || null,
+        resourceId: resolved.resourceId || null,
         partySize: input.partySize,
         startsAt,
         endsAt,
@@ -289,7 +289,16 @@ async function createPublicTimedBooking({
         tenantId,
         bookingId: booking.id,
         action: "CREATED",
-        toState: { status: booking.status, origin: "PUBLIC", paymentRequired, partySize: input.partySize, addonIds: input.addonIds },
+        toState: {
+          status: booking.status,
+          origin: "PUBLIC",
+          paymentRequired,
+          partySize: input.partySize,
+          addonIds: input.addonIds,
+          assignmentStrategy: service.assignmentStrategy,
+          professionalId: resolved.professionalId ?? null,
+          resourceId: resolved.resourceId ?? null,
+        },
       },
     });
     if (customValues.length) {
@@ -310,6 +319,76 @@ async function createPublicTimedBooking({
     }
     return booking;
   }, { isolationLevel: "Serializable" });
+}
+
+async function resolveTimedAssignments({
+  tenantId,
+  locationId,
+  service,
+  input,
+  startsAt,
+  date,
+}: {
+  tenantId: string;
+  locationId: string;
+  service: TimedService;
+  input: z.infer<typeof publicBookingSchema>;
+  startsAt: Date;
+  date: string;
+}) {
+  if (input.professionalId && !service.professionals.some((item) => item.professionalId === input.professionalId)) throw new Error("Profesional no habilitado para este servicio");
+  if (input.resourceId && !service.resources.some((item) => item.resourceId === input.resourceId)) throw new Error("Recurso no habilitado para este servicio");
+
+  const automatic = service.assignmentStrategy === "ANY_AVAILABLE" || service.assignmentStrategy === "ROUND_ROBIN";
+  if (!automatic) {
+    if (service.professionalMode === "REQUIRED" && !input.professionalId) throw new Error("Seleccioná un profesional");
+    if (service.resourceMode === "REQUIRED" && !input.resourceId) throw new Error("Seleccioná un recurso");
+    return { professionalId: input.professionalId, resourceId: input.resourceId };
+  }
+
+  const professionalCandidates = input.professionalId
+    ? [input.professionalId]
+    : service.professionalMode === "NONE"
+      ? [undefined]
+      : service.professionals.map((item) => item.professionalId);
+  const resourceCandidates = input.resourceId
+    ? [input.resourceId]
+    : service.resourceMode === "NONE"
+      ? [undefined]
+      : service.resources.map((item) => item.resourceId);
+  if (!professionalCandidates.length || !resourceCandidates.length) throw new Error("No hay equipo o recursos habilitados para este servicio");
+
+  const combinations = professionalCandidates.flatMap((professionalId) => resourceCandidates.map((resourceId) => ({ professionalId, resourceId })));
+  const available: typeof combinations = [];
+  for (const candidate of combinations) {
+    const slots = await getAvailableSlots({
+      tenantId,
+      locationId,
+      serviceId: input.serviceId,
+      professionalId: candidate.professionalId,
+      resourceId: candidate.resourceId,
+      addonIds: input.addonIds,
+      date,
+    });
+    if (slots.some((slot) => slot.startsAt.getTime() === startsAt.getTime())) available.push(candidate);
+  }
+  if (!available.length) throw new Error("Ese horario ya no está disponible");
+  if (service.assignmentStrategy === "ANY_AVAILABLE" || !available.some((item) => item.professionalId)) return available[0];
+
+  const since = new Date(Date.now() - 90 * 86_400_000);
+  const recent = await platformDb.booking.findMany({
+    where: {
+      tenantId,
+      serviceId: service.id,
+      professionalId: { in: available.map((item) => item.professionalId).filter((value): value is string => Boolean(value)) },
+      createdAt: { gte: since },
+      status: { notIn: ["CANCELLED", "NO_SHOW"] },
+    },
+    select: { professionalId: true },
+  });
+  const counts = new Map<string, number>();
+  for (const booking of recent) if (booking.professionalId) counts.set(booking.professionalId, (counts.get(booking.professionalId) ?? 0) + 1);
+  return [...available].sort((a, b) => (counts.get(a.professionalId ?? "") ?? 0) - (counts.get(b.professionalId ?? "") ?? 0))[0];
 }
 
 async function createPublicSessionBooking({
