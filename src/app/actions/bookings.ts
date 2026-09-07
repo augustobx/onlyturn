@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { fromZonedTime } from "date-fns-tz";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { requireTenantSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { createTenantDb } from "@/lib/tenant-db";
@@ -10,6 +10,7 @@ import { platformDb } from "@/lib/db";
 import { normalizeEmail, normalizePhone } from "@/lib/security";
 import { assertPlanCapacity } from "@/lib/plans";
 import { restorePackageUsageForBooking } from "@/lib/packages";
+import { getAdminFreeSlots } from "@/lib/admin-availability";
 
 export async function updateBookingStatusAction(formData: FormData) {
   const { session, membership } = await requireTenantSession();
@@ -32,26 +33,38 @@ export async function updateBookingStatusAction(formData: FormData) {
     await createTenantDb(membership.tenantId).updateBookingStatus(parsed.bookingId, parsed.status, session.userId, parsed.reason);
   }
   revalidatePath("/app/agenda");
+  revalidatePath("/agenda");
   revalidatePath("/app/sesiones");
 }
 
 export async function rescheduleBookingAction(formData: FormData) {
   const { session, membership, tenant } = await requireTenantSession();
   if (!can(membership.role, membership.permissions, "bookings:manage")) throw new Error("Forbidden");
-  const parsed = z.object({
-    bookingId: z.string().min(1),
-    startsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
-  }).parse(Object.fromEntries(formData));
+  const parsed = z.object({ bookingId: z.string().min(1), startsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/) }).parse(Object.fromEntries(formData));
 
   const booking = await platformDb.booking.findFirst({
     where: { id: parsed.bookingId, tenantId: membership.tenantId },
-    select: { sessionId: true },
+    select: { id: true, sessionId: true, locationId: true, serviceId: true, professionalId: true, resourceId: true },
   });
   if (!booking) throw new Error("Reserva inexistente");
   if (booking.sessionId) throw new Error("Una inscripción de clase o evento se cambia desde la sesión, no como turno individual");
 
-  await createTenantDb(membership.tenantId).rescheduleBooking(parsed.bookingId, fromZonedTime(parsed.startsAt, tenant.timezone), session.userId);
+  const desiredStart = fromZonedTime(parsed.startsAt, tenant.timezone);
+  const date = formatInTimeZone(desiredStart, tenant.timezone, "yyyy-MM-dd");
+  const freeSlots = await getAdminFreeSlots({
+    tenantId: membership.tenantId,
+    date,
+    locationId: booking.locationId,
+    serviceId: booking.serviceId,
+    professionalId: booking.professionalId ?? undefined,
+    resourceId: booking.resourceId ?? undefined,
+    excludeBookingId: booking.id,
+  });
+  if (!freeSlots.some((slot) => slot.startsAt.getTime() === desiredStart.getTime())) throw new Error("Ese horario ya no está libre. Elegí uno de los huecos disponibles del calendario.");
+
+  await createTenantDb(membership.tenantId).rescheduleBooking(parsed.bookingId, desiredStart, session.userId);
   revalidatePath("/app/agenda");
+  revalidatePath("/agenda");
 }
 
 export async function createManualBookingAction(formData: FormData) {
@@ -75,18 +88,30 @@ export async function createManualBookingAction(formData: FormData) {
     select: { bookingType: true },
   });
   if (!service) throw new Error("Servicio inexistente");
-  if (service.bookingType === "CLASS" || service.bookingType === "EVENT") {
-    throw new Error("Las clases y eventos se cargan desde Clases y eventos para respetar sesión y cupos");
-  }
+  if (service.bookingType === "CLASS" || service.bookingType === "EVENT") throw new Error("Las clases y eventos se cargan desde Clases y eventos para respetar sesión y cupos");
+
+  const desiredStart = fromZonedTime(input.startsAt, tenant.timezone);
+  const date = formatInTimeZone(desiredStart, tenant.timezone, "yyyy-MM-dd");
+  const freeSlots = await getAdminFreeSlots({
+    tenantId: membership.tenantId,
+    date,
+    locationId: input.locationId,
+    serviceId: input.serviceId,
+    professionalId: input.professionalId || undefined,
+    resourceId: input.resourceId || undefined,
+  });
+  const matchedSlot = freeSlots.find((slot) => slot.startsAt.getTime() === desiredStart.getTime());
+  if (!matchedSlot) throw new Error("Ese horario no está disponible. Elegí un hueco libre desde el calendario.");
 
   await createTenantDb(membership.tenantId).createManualBooking({
     ...input,
-    professionalId: input.professionalId || undefined,
-    resourceId: input.resourceId || undefined,
-    startsAt: fromZonedTime(input.startsAt, tenant.timezone),
+    professionalId: input.professionalId || matchedSlot.professionalId || undefined,
+    resourceId: input.resourceId || matchedSlot.resourceId || undefined,
+    startsAt: desiredStart,
     normalizedPhone: normalizePhone(input.phone),
     email: input.email || null,
     normalizedEmail: normalizeEmail(input.email),
   }, session.userId);
   revalidatePath("/app/agenda");
+  revalidatePath("/agenda");
 }
