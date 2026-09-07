@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import type { Metadata } from "next";
+import { CalendarDays, House, UserRound } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { getPublicCatalog, getPublicExperience, getPublicTenant } from "@/lib/booking-service";
 import { BookingWizard } from "./booking-wizard";
@@ -70,12 +71,12 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
     } as React.CSSProperties}
   >
     <AnnouncementBoard businessName={tenant.name} notices={experience.announcements.map((item) => ({ id: item.id, title: item.title, body: item.body, style: item.style }))} />
-    <div className="public-hero"><div className="booking-wrap"><div className="public-brand-v2">
+    <div className="public-hero" id="info"><div className="booking-wrap"><div className="public-brand-v2">
       {branding.logoUrl ? <img src={branding.logoUrl} alt={`Logo de ${tenant.name}`} /> : <div className="logo">{tenant.name[0]}</div>}
       <div><h1>{tenant.name}</h1><p>{branding.description ?? "Reservá tu turno en pocos minutos"}</p></div>
       <a className="public-account-link" href={customerSession ? "/mi-cuenta" : "/cuenta"}>{customerSession ? `Hola, ${customerSession.account.customer.firstName}` : "Ingresar"}</a>
     </div></div></div>
-    <div className="booking-wrap booking-content-v2">
+    <div className="booking-wrap booking-content-v2" id="reservar">
       {registrationRequired ? (
         <section className="registration-welcome card">
           <span className="registration-welcome-badge">Bienvenido</span>
@@ -116,5 +117,10 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
       {experience.gallery.length > 0 && <section className="public-gallery"><h2>Conocé nuestro espacio</h2><div>{experience.gallery.map((item) => <img src={item.publicUrl} alt={item.altText ?? tenant.name} key={item.id} />)}</div></section>}
       <p className="muted" style={{ textAlign: "center", fontSize: 11, marginTop: 22 }}>Agenda gestionada con <strong>OnlyTurn</strong> · NanoLabs</p>
     </div>
+    <nav className="public-pwa-nav" aria-label="Navegación de la aplicación">
+      <a className="primary" href={registrationRequired?"/registro":"#reservar"}><CalendarDays />{registrationRequired?"Registrarme":"Reservar"}</a>
+      <a href={customerSession?"/mi-cuenta":"/cuenta"}><UserRound />{customerSession?"Mis turnos":"Mi cuenta"}</a>
+      <a href="#info"><House />Negocio</a>
+    </nav>
   </main>;
 }
