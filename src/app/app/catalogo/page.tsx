@@ -223,7 +223,7 @@ function ServiceForm({
   serviceId?: string;
   locations: { id: string; name: string }[];
   professionals: { id: string; name: string }[];
-  resources: { id: string; name: string }[];
+  resources: { id: string; name: string; type?: string | null }[];
   defaults?: ServiceDefaults;
   submitLabel?: string;
 }) {
