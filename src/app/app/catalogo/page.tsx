@@ -6,25 +6,29 @@ import {
   Clock3,
   Globe2,
   Plus,
+  RotateCcw,
   Settings2,
 } from "lucide-react";
 import { requireTenantSession } from "@/lib/auth";
-import { getUniversalServiceCatalog } from "@/lib/service-catalog";
-import { archiveServiceAction, createServiceAction, updateServiceAction } from "@/app/actions/catalog";
+import { getArchivedServices, getUniversalServiceCatalog } from "@/lib/service-catalog";
+import { archiveServiceAction, createServiceAction, restoreServiceAction, updateServiceAction } from "@/app/actions/catalog";
 
 const requirementLabels = { NONE: "No usa", OPTIONAL: "Opcional", REQUIRED: "Obligatorio" } as const;
 const bookingTypeLabels = { APPOINTMENT: "Cita / servicio", CLASS: "Clase / grupo", EVENT: "Evento / fecha", RESOURCE: "Reserva de recurso" } as const;
 
 export default async function CatalogPage() {
   const { membership, tenant } = await requireTenantSession();
-  const [locations, services, professionals, resources] = await getUniversalServiceCatalog(membership.tenantId);
+  const [[locations, services, professionals, resources], archivedServices] = await Promise.all([
+    getUniversalServiceCatalog(membership.tenantId),
+    getArchivedServices(membership.tenantId),
+  ]);
   const money = new Intl.NumberFormat("es-AR", { style: "currency", currency: tenant.currency, maximumFractionDigits: 0 });
 
   return <>
     <div className="page-title">
       <span className="eyebrow">Paso 3 · Oferta reservable</span>
       <h1>Servicios, clases, eventos y recursos</h1>
-      <p className="muted">Acá definís exclusivamente qué puede reservar el cliente. Sedes, profesionales y recursos se administran en el paso anterior.</p>
+      <p className="muted">Creá, editá, archivá y recuperá lo que el cliente puede reservar. El historial nunca se pierde.</p>
     </div>
 
     <div className="card setup-context-note">
@@ -36,7 +40,7 @@ export default async function CatalogPage() {
       <div className="card stat"><span className="muted">Tipos de reserva</span><strong>{services.length}</strong><small className="muted">configuraciones activas</small></div>
       <div className="card stat"><span className="muted">Citas</span><strong>{services.filter((item) => item.bookingType === "APPOINTMENT").length}</strong><small className="muted">servicios 1:1</small></div>
       <div className="card stat"><span className="muted">Clases / eventos</span><strong>{services.filter((item) => ["CLASS", "EVENT"].includes(item.bookingType)).length}</strong><small className="muted">con sesiones y cupos</small></div>
-      <div className="card stat"><span className="muted">Recursos</span><strong>{services.filter((item) => item.bookingType === "RESOURCE").length}</strong><small className="muted">reservas de activos</small></div>
+      <div className="card stat"><span className="muted">Archivados</span><strong>{archivedServices.length}</strong><small className="muted">recuperables</small></div>
     </section>
 
     <details className="card" open={!services.length}>
@@ -45,7 +49,7 @@ export default async function CatalogPage() {
       {!locations.length ? <div className="empty">Primero creá una sede desde <Link href="/estructura">Sedes y equipo</Link>.</div> : <ServiceForm action={createServiceAction} locations={locations} professionals={professionals} resources={resources} />}
     </details>
 
-    <div className="platform-toolbar"><h2>Tipos de reserva configurados</h2><span className="muted" style={{ fontSize: 12 }}>Editá sólo el servicio que necesites; el resto conserva su configuración.</span></div>
+    <div className="platform-toolbar"><h2>Tipos de reserva configurados</h2><span className="muted" style={{ fontSize: 12 }}>Abrí uno para editarlo o archivarlo.</span></div>
 
     <div className="grid" style={{ gap: 14 }}>
       {services.length ? services.map((service) => {
@@ -66,11 +70,21 @@ export default async function CatalogPage() {
 
           <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--line)" }}>
             <ServiceForm action={updateServiceAction} serviceId={service.id} locations={locations} professionals={professionals} resources={resources} defaults={{ name: service.name, description: service.description ?? "", category: service.category ?? "", bookingType: service.bookingType, assignmentStrategy: service.assignmentStrategy, durationMinutes: service.durationMinutes, preparationMinutes: service.preparationMinutes, bufferMinutes: service.bufferMinutes, minPartySize: service.minPartySize, maxPartySize: service.maxPartySize, price: service.priceCents == null ? "" : service.priceCents / 100, color: service.color, locationId, professionalMode: service.professionalMode, resourceMode: service.resourceMode, allowWaitlist: service.allowWaitlist, allowRecurring: service.allowRecurring, onlineEnabled: service.onlineEnabled, professionalIds, resourceIds }} submitLabel="Guardar configuración" />
-            <form action={archiveServiceAction} style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}><input type="hidden" name="serviceId" value={service.id} /><button className="button ghost" type="submit" style={{ color: "#b42331", display: "inline-flex", alignItems: "center", gap: 7 }}><Archive size={14} /> Archivar tipo de reserva</button></form>
+            <form action={archiveServiceAction} className="setup-lifecycle-action" style={{ marginTop: 16 }}><input type="hidden" name="serviceId" value={service.id} /><button className="button ghost danger-action" type="submit"><Archive size={14} /> Archivar tipo de reserva</button><small className="muted">Si tiene reservas o sesiones futuras, OnlyTurn no permitirá archivarlo hasta resolverlas.</small></form>
           </div>
         </details>;
       }) : <div className="card empty">Todavía no hay tipos de reserva. Creá el primero arriba.</div>}
     </div>
+
+    {archivedServices.length > 0 && <>
+      <div className="platform-toolbar"><h2>Archivados</h2><span className="muted" style={{ fontSize: 12 }}>No aparecen en la reserva pública, pero conservan todo el historial.</span></div>
+      <div className="card archived-entity-list">
+        {archivedServices.map((service) => <div className="archived-entity-row" key={service.id}>
+          <div><strong>{service.name}</strong><small className="muted">{bookingTypeLabels[service.bookingType]} · {service.category ?? "General"} · {service._count.bookings} reservas · {service._count.bookingSessions} sesiones</small></div>
+          <form action={restoreServiceAction}><input type="hidden" name="serviceId" value={service.id} /><button className="button secondary"><RotateCcw size={14} /> Reactivar</button></form>
+        </div>)}
+      </div>
+    </>}
   </>;
 }
 
@@ -93,7 +107,7 @@ function ServiceForm({ action, serviceId, locations, professionals, resources, d
   defaults?: ServiceDefaults;
   submitLabel?: string;
 }) {
-  return <form action={action} style={{ marginTop: 18 }}>
+  return <form action={action} className="setup-service-form" style={{ marginTop: 18 }}>
     {serviceId && <input type="hidden" name="serviceId" value={serviceId} />}
     <input type="hidden" name="assignmentStrategy" value={defaults?.assignmentStrategy ?? "CLIENT_CHOOSES"} />
 
