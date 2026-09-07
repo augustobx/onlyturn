@@ -1,18 +1,24 @@
 import "server-only";
-import type { RequirementMode } from "@prisma/client";
+import type { AssignmentStrategy, BookingType, RequirementMode } from "@prisma/client";
 import { platformDb } from "./db";
 
 export type UniversalServiceInput = {
   name: string;
   description?: string;
   category?: string;
+  bookingType: BookingType;
+  assignmentStrategy: AssignmentStrategy;
   durationMinutes: number;
   preparationMinutes: number;
   bufferMinutes: number;
   priceCents?: number;
   color: string;
+  minPartySize: number;
+  maxPartySize: number;
   professionalMode: RequirementMode;
   resourceMode: RequirementMode;
+  allowWaitlist: boolean;
+  allowRecurring: boolean;
   onlineEnabled: boolean;
   locationId: string;
   professionalIds: string[];
@@ -21,7 +27,7 @@ export type UniversalServiceInput = {
 
 async function validateAssignments(
   tenantId: string,
-  input: Pick<UniversalServiceInput, "locationId" | "professionalIds" | "resourceIds" | "professionalMode" | "resourceMode">,
+  input: Pick<UniversalServiceInput, "locationId" | "professionalIds" | "resourceIds" | "professionalMode" | "resourceMode" | "bookingType" | "minPartySize" | "maxPartySize">,
 ) {
   const [location, professionals, resources] = await Promise.all([
     platformDb.location.findFirst({ where: { id: input.locationId, tenantId, isActive: true }, select: { id: true } }),
@@ -38,6 +44,9 @@ async function validateAssignments(
   if (resources.length !== input.resourceIds.length) throw new Error("Hay recursos que no pertenecen a este tenant");
   if (input.professionalMode === "REQUIRED" && !input.professionalIds.length) throw new Error("Seleccioná al menos un profesional para un servicio que lo requiere");
   if (input.resourceMode === "REQUIRED" && !input.resourceIds.length) throw new Error("Seleccioná al menos un recurso para un servicio que lo requiere");
+  if (input.bookingType === "RESOURCE" && input.resourceMode === "NONE") throw new Error("Una reserva de recurso necesita al menos un recurso habilitado");
+  if (input.minPartySize < 1 || input.maxPartySize < input.minPartySize) throw new Error("La cantidad de asistentes es inválida");
+  if (["APPOINTMENT", "RESOURCE"].includes(input.bookingType) && input.maxPartySize > 100) throw new Error("La cantidad máxima de asistentes es demasiado alta para este tipo de reserva");
 }
 
 function normalizedAssignments(input: UniversalServiceInput) {
@@ -56,7 +65,7 @@ export async function getUniversalServiceCatalog(tenantId: string) {
         locations: { include: { location: true } },
         professionals: { include: { professional: true } },
         resources: { include: { resource: true } },
-        _count: { select: { bookings: true, customFields: true } },
+        _count: { select: { bookings: true, customFields: true, bookingSessions: true, waitlistEntries: true } },
       },
       orderBy: [{ category: "asc" }, { name: "asc" }],
     }),
@@ -77,14 +86,20 @@ export async function createUniversalService(tenantId: string, input: UniversalS
         name: normalized.name,
         description: normalized.description || null,
         category: normalized.category || null,
+        bookingType: normalized.bookingType,
+        assignmentStrategy: normalized.assignmentStrategy,
         durationMinutes: normalized.durationMinutes,
         preparationMinutes: normalized.preparationMinutes,
         bufferMinutes: normalized.bufferMinutes,
         priceCents: normalized.priceCents,
         color: normalized.color,
-        capacity: 1,
+        capacity: normalized.maxPartySize,
+        minPartySize: normalized.minPartySize,
+        maxPartySize: normalized.maxPartySize,
         professionalMode: normalized.professionalMode,
         resourceMode: normalized.resourceMode,
+        allowWaitlist: normalized.allowWaitlist,
+        allowRecurring: normalized.allowRecurring,
         onlineEnabled: normalized.onlineEnabled,
         locations: { create: { tenantId, locationId: normalized.locationId } },
         ...(normalized.professionalIds.length
@@ -106,9 +121,12 @@ export async function createUniversalService(tenantId: string, input: UniversalS
         entityId: service.id,
         metadata: {
           category: normalized.category || null,
+          bookingType: normalized.bookingType,
+          assignmentStrategy: normalized.assignmentStrategy,
           durationMinutes: normalized.durationMinutes,
           professionalMode: normalized.professionalMode,
           resourceMode: normalized.resourceMode,
+          maxPartySize: normalized.maxPartySize,
           onlineEnabled: normalized.onlineEnabled,
         },
       },
@@ -137,13 +155,20 @@ export async function updateUniversalService(tenantId: string, serviceId: string
         name: normalized.name,
         description: normalized.description || null,
         category: normalized.category || null,
+        bookingType: normalized.bookingType,
+        assignmentStrategy: normalized.assignmentStrategy,
         durationMinutes: normalized.durationMinutes,
         preparationMinutes: normalized.preparationMinutes,
         bufferMinutes: normalized.bufferMinutes,
         priceCents: normalized.priceCents,
         color: normalized.color,
+        capacity: normalized.maxPartySize,
+        minPartySize: normalized.minPartySize,
+        maxPartySize: normalized.maxPartySize,
         professionalMode: normalized.professionalMode,
         resourceMode: normalized.resourceMode,
+        allowWaitlist: normalized.allowWaitlist,
+        allowRecurring: normalized.allowRecurring,
         onlineEnabled: normalized.onlineEnabled,
         locations: { create: { tenantId, locationId: normalized.locationId } },
         ...(normalized.professionalIds.length
@@ -163,6 +188,7 @@ export async function updateUniversalService(tenantId: string, serviceId: string
         action: "service.updated",
         entityType: "Service",
         entityId: service.id,
+        metadata: { bookingType: normalized.bookingType, assignmentStrategy: normalized.assignmentStrategy },
       },
     });
     return service;
@@ -172,15 +198,18 @@ export async function updateUniversalService(tenantId: string, serviceId: string
 export async function archiveUniversalService(tenantId: string, serviceId: string, actorId: string) {
   const service = await platformDb.service.findFirst({ where: { id: serviceId, tenantId, isActive: true }, select: { id: true, name: true } });
   if (!service) throw new Error("Servicio inexistente");
-  const futureBookings = await platformDb.booking.count({
-    where: {
-      tenantId,
-      serviceId,
-      startsAt: { gte: new Date() },
-      status: { notIn: ["CANCELLED", "NO_SHOW", "COMPLETED"] },
-    },
-  });
-  if (futureBookings) throw new Error(`No podés archivar este servicio porque tiene ${futureBookings} reserva(s) futura(s)`);
+  const [futureBookings, futureSessions] = await Promise.all([
+    platformDb.booking.count({
+      where: {
+        tenantId,
+        serviceId,
+        startsAt: { gte: new Date() },
+        status: { notIn: ["CANCELLED", "NO_SHOW", "COMPLETED"] },
+      },
+    }),
+    platformDb.bookingSession.count({ where: { tenantId, serviceId, startsAt: { gte: new Date() }, status: "SCHEDULED" } }),
+  ]);
+  if (futureBookings || futureSessions) throw new Error(`No podés archivar este servicio porque tiene actividad futura (${futureBookings} reserva(s), ${futureSessions} sesión(es))`);
 
   await platformDb.$transaction([
     platformDb.service.update({ where: { id: serviceId }, data: { isActive: false, onlineEnabled: false } }),
