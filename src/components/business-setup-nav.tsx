@@ -38,7 +38,8 @@ export function BusinessSetupNav() {
     <nav className="business-setup-nav" aria-label="Pasos de configuración">
       {steps.map(({ href, label, icon: Icon, path, tabs }, index) => {
         const pathActive = pathname === path || (path === "/servicios" && pathname === "/catalogo");
-        const active = pathActive && (!tabs || tabs.includes(tab as never));
+        const allowedTabs = tabs ? tabs as readonly (string | null)[] : null;
+        const active = pathActive && (!allowedTabs || allowedTabs.includes(tab));
         return <Link href={href} className={active ? "active" : undefined} key={label}>
           <span className="setup-step-number">{index + 1}</span><Icon size={15} /><span>{label}</span>
         </Link>;
