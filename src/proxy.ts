@@ -4,6 +4,7 @@ import { isPlatformHostname, normalizeHostname, tenantSlugFromHostname } from "@
 const PUBLIC_TENANT_PATHS = new Set(["/", "/cuenta", "/mi-cuenta", "/registro", "/payment"]);
 const TENANT_ADMIN_PREFIXES = [
   "/agenda",
+  "/caja",
   "/clientes",
   "/configurar",
   "/configuracion",
