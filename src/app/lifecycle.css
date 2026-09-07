@@ -1,0 +1,199 @@
+/* OnlyTurn · Entity lifecycle management
+   Shared visual language for edit / archive / restore controls. */
+
+.setup-manage-row,
+.settings-manage-item,
+.availability-rule-card {
+  overflow: hidden;
+  border: 1px solid #e1e9f2;
+  border-radius: 13px;
+  background: #fbfdff;
+}
+
+.setup-manage-row + .setup-manage-row,
+.settings-manage-item + .settings-manage-item { margin-top: 9px; }
+
+.setup-manage-row > summary,
+.settings-manage-item > summary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 62px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.setup-manage-row > summary::-webkit-details-marker,
+.settings-manage-item > summary::-webkit-details-marker,
+.availability-rule-card > summary::-webkit-details-marker { display: none; }
+
+.setup-manage-row > summary > div,
+.settings-manage-item > summary > div { min-width: 0; display: grid; gap: 4px; }
+.setup-manage-row > summary strong,
+.settings-manage-item > summary strong { font-size: .84rem; }
+.setup-manage-row > summary small,
+.settings-manage-item > summary small {
+  overflow: hidden;
+  color: #718198;
+  font-size: .74rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-manage-row.is-archived,
+.settings-manage-item.is-archived,
+.availability-rule-card.is-archived {
+  background: #f6f8fb;
+  border-color: #e4e9ef;
+}
+.setup-manage-row.is-archived > summary,
+.settings-manage-item.is-archived > summary { opacity: .82; }
+
+.setup-manage-panel,
+.settings-manage-panel,
+.availability-rule-editor {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-top: 1px solid #e4ebf3;
+  background: #fff;
+}
+
+.setup-edit-form,
+.automation-edit-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+  align-items: end;
+}
+.setup-edit-form > .field,
+.automation-edit-form > .field { margin: 0; }
+.setup-edit-form > .button,
+.setup-edit-form > .setup-color-submit,
+.setup-edit-form > .check-row,
+.automation-edit-form > .button,
+.automation-edit-form > small { grid-column: 1 / -1; }
+.setup-edit-form .input,
+.setup-edit-form .select,
+.automation-edit-form .input,
+.automation-edit-form .select { min-height: 44px; }
+
+.setup-lifecycle-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid #edf1f5;
+}
+.setup-lifecycle-action small {
+  max-width: 680px;
+  font-size: .76rem;
+  line-height: 1.45;
+}
+.setup-lifecycle-action > form { margin: 0; }
+
+.danger-action { color: #b42331 !important; }
+.danger-action:hover {
+  color: #991b1b !important;
+  background: #fff0f1 !important;
+}
+
+.archived-entity-list,
+.settings-manage-list,
+.availability-rule-list { display: grid; gap: 11px; }
+
+.archived-entity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid #e7edf4;
+}
+.archived-entity-row:last-child { border-bottom: 0; }
+.archived-entity-row > div { min-width: 0; display: grid; gap: 4px; }
+.archived-entity-row small { font-size: .76rem; line-height: 1.45; }
+
+.availability-rule-card { padding: 0 !important; }
+.availability-rule-card > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 17px 19px;
+  cursor: pointer;
+  list-style: none;
+}
+.availability-rule-card > summary > div:first-child { min-width: 0; display: grid; gap: 5px; }
+.availability-rule-card > summary small { color: #6f8095; font-size: .76rem; }
+.availability-rule-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: .76rem;
+}
+.availability-rule-editor { padding: 19px; }
+
+.settings-manage-item { padding: 0 !important; }
+.settings-manage-item > summary { grid-template-columns: minmax(0, 1fr) auto; }
+.settings-manage-item > summary:has(.settings-media-thumb) { grid-template-columns: auto minmax(0, 1fr) auto; }
+.settings-manage-item.simple {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 15px;
+}
+.settings-manage-item.simple > div { min-width: 0; display: grid; gap: 4px; }
+.settings-manage-item.simple small { color: #718198; font-size: .75rem; line-height: 1.45; }
+.settings-media-thumb {
+  width: 58px;
+  height: 46px;
+  object-fit: cover;
+  border: 1px solid #dce5ef;
+  border-radius: 10px;
+  background: #f2f5f8;
+}
+
+/* Inline forms used by extras / packages / automations outside the setup path. */
+.tenant-shell .settings-manage-list .setup-edit-form,
+.tenant-shell .settings-manage-list .automation-edit-form { max-width: 1050px; }
+
+@media (max-width: 900px) {
+  .setup-edit-form,
+  .automation-edit-form { grid-template-columns: 1fr; }
+  .setup-edit-form > .button,
+  .setup-edit-form > .setup-color-submit,
+  .setup-edit-form > .check-row,
+  .automation-edit-form > .button,
+  .automation-edit-form > small { grid-column: auto; }
+  .availability-rule-card > summary { align-items: flex-start; flex-direction: column; }
+  .availability-rule-meta { justify-content: flex-start; }
+}
+
+@media (max-width: 640px) {
+  .setup-manage-row > summary,
+  .settings-manage-item > summary,
+  .settings-manage-item > summary:has(.settings-media-thumb) {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .setup-manage-row > summary > .status,
+  .settings-manage-item > summary > .status { grid-column: 2; justify-self: start; }
+  .settings-media-thumb { grid-row: 1 / span 2; }
+  .setup-manage-panel,
+  .settings-manage-panel,
+  .availability-rule-editor { padding: 15px; }
+  .setup-lifecycle-action,
+  .archived-entity-row,
+  .settings-manage-item.simple { align-items: stretch; flex-direction: column; }
+  .setup-lifecycle-action .button,
+  .archived-entity-row .button,
+  .settings-manage-item.simple .button { width: 100%; justify-content: center; }
+}

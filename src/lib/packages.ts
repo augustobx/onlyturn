@@ -4,6 +4,23 @@ import { addDays } from "date-fns";
 import type { Prisma } from "@prisma/client";
 import { platformDb } from "./db";
 
+export type ServicePackageInput = {
+  name: string;
+  description?: string;
+  priceCents: number;
+  uses: number;
+  validityDays?: number;
+  serviceIds: string[];
+};
+
+async function validatePackageServices(tenantId: string, serviceIdsInput: string[]) {
+  const serviceIds = [...new Set(serviceIdsInput)];
+  if (!serviceIds.length) throw new Error("Seleccioná al menos un servicio");
+  const validServices = await platformDb.service.findMany({ where: { tenantId, id: { in: serviceIds }, isActive: true }, select: { id: true } });
+  if (validServices.length !== serviceIds.length) throw new Error("Hay servicios inválidos en el paquete");
+  return serviceIds;
+}
+
 export async function getPackageManagementData(tenantId: string) {
   return Promise.all([
     platformDb.servicePackage.findMany({
@@ -24,10 +41,7 @@ export async function getPackageManagementData(tenantId: string) {
 
 export async function getCustomerUsablePackages(tenantId: string, customerId: string) {
   const now = new Date();
-  await platformDb.customerPackage.updateMany({
-    where: { tenantId, customerId, status: "ACTIVE", expiresAt: { lt: now } },
-    data: { status: "EXPIRED" },
-  });
+  await platformDb.customerPackage.updateMany({ where: { tenantId, customerId, status: "ACTIVE", expiresAt: { lt: now } }, data: { status: "EXPIRED" } });
   return platformDb.customerPackage.findMany({
     where: { tenantId, customerId, status: "ACTIVE", remainingUses: { gt: 0 }, startsAt: { lte: now }, OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
     include: { package: { include: { services: { select: { serviceId: true } } } } },
@@ -35,18 +49,8 @@ export async function getCustomerUsablePackages(tenantId: string, customerId: st
   });
 }
 
-export async function createServicePackage(tenantId: string, input: {
-  name: string;
-  description?: string;
-  priceCents: number;
-  uses: number;
-  validityDays?: number;
-  serviceIds: string[];
-}, actorId: string) {
-  const serviceIds = [...new Set(input.serviceIds)];
-  if (!serviceIds.length) throw new Error("Seleccioná al menos un servicio");
-  const validServices = await platformDb.service.findMany({ where: { tenantId, id: { in: serviceIds }, isActive: true }, select: { id: true } });
-  if (validServices.length !== serviceIds.length) throw new Error("Hay servicios inválidos en el paquete");
+export async function createServicePackage(tenantId: string, input: ServicePackageInput, actorId: string) {
+  const serviceIds = await validatePackageServices(tenantId, input.serviceIds);
   return platformDb.$transaction(async (tx) => {
     const packageRecord = await tx.servicePackage.create({
       data: {
@@ -64,13 +68,43 @@ export async function createServicePackage(tenantId: string, input: {
   });
 }
 
-export async function archiveServicePackage(tenantId: string, packageId: string, actorId: string) {
-  const record = await platformDb.servicePackage.findFirst({ where: { id: packageId, tenantId, isActive: true }, select: { id: true } });
+export async function updateServicePackage(tenantId: string, packageId: string, input: ServicePackageInput, actorId: string) {
+  const serviceIds = await validatePackageServices(tenantId, input.serviceIds);
+  const current = await platformDb.servicePackage.findFirst({ where: { id: packageId, tenantId } });
+  if (!current) throw new Error("Paquete inexistente");
+  return platformDb.$transaction(async (tx) => {
+    await tx.servicePackageService.deleteMany({ where: { tenantId, packageId: current.id } });
+    const updated = await tx.servicePackage.update({
+      where: { id: current.id },
+      data: {
+        name: input.name,
+        description: input.description || null,
+        priceCents: input.priceCents,
+        uses: input.uses,
+        validityDays: input.validityDays ?? null,
+        services: { create: serviceIds.map((serviceId) => ({ tenantId, serviceId })) },
+      },
+    });
+    await tx.auditLog.create({
+      data: { scope: "TENANT", tenantId, actorId, action: "service_package.updated", entityType: "ServicePackage", entityId: current.id, metadata: { serviceIds, uses: input.uses } },
+    });
+    return updated;
+  });
+}
+
+export async function setServicePackageActive(tenantId: string, packageId: string, isActive: boolean, actorId: string) {
+  const record = await platformDb.servicePackage.findFirst({ where: { id: packageId, tenantId }, include: { services: { include: { service: true } } } });
   if (!record) throw new Error("Paquete inexistente");
-  await platformDb.$transaction([
-    platformDb.servicePackage.update({ where: { id: record.id }, data: { isActive: false } }),
-    platformDb.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: "service_package.archived", entityType: "ServicePackage", entityId: record.id } }),
-  ]);
+  if (isActive && !record.services.some((link) => link.service.isActive)) throw new Error("Reactivá primero al menos un servicio incluido en este paquete");
+  const updated = await platformDb.servicePackage.update({ where: { id: record.id }, data: { isActive } });
+  await platformDb.auditLog.create({
+    data: { scope: "TENANT", tenantId, actorId, action: isActive ? "service_package.reactivated" : "service_package.archived", entityType: "ServicePackage", entityId: record.id },
+  });
+  return updated;
+}
+
+export async function archiveServicePackage(tenantId: string, packageId: string, actorId: string) {
+  return setServicePackageActive(tenantId, packageId, false, actorId);
 }
 
 export async function grantCustomerPackage(tenantId: string, packageId: string, customerId: string, actorId: string) {
@@ -95,7 +129,7 @@ export async function grantCustomerPackage(tenantId: string, packageId: string, 
         expiresAt,
       },
     });
-    await tx.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: "customer_package.granted", entityType: "CustomerPackage", entityId: membership.id, metadata: { customerId, packageId, uses: packageRecord.uses, expiresAt } } });
+    await tx.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: "customer_package.granted", entityType: "CustomerPackage", entityId: membership.id, metadata: { customerId, packageId, uses: packageRecord.uses, expiresAt: expiresAt?.toISOString() ?? null } } });
     return membership;
   });
 }
@@ -109,14 +143,7 @@ export async function cancelCustomerPackage(tenantId: string, customerPackageId:
   ]);
 }
 
-export async function consumeCustomerPackage(tx: Prisma.TransactionClient, input: {
-  tenantId: string;
-  customerId: string;
-  customerPackageId: string;
-  serviceId: string;
-  bookingId: string;
-  uses: number;
-}) {
+export async function consumeCustomerPackage(tx: Prisma.TransactionClient, input: { tenantId: string; customerId: string; customerPackageId: string; serviceId: string; bookingId: string; uses: number }) {
   const now = new Date();
   const membership = await tx.customerPackage.findFirst({
     where: {
@@ -132,39 +159,19 @@ export async function consumeCustomerPackage(tx: Prisma.TransactionClient, input
     select: { id: true },
   });
   if (!membership) throw new Error("El paquete elegido no está disponible para esta reserva");
-
-  const consumed = await tx.customerPackage.updateMany({
-    where: { id: membership.id, tenantId: input.tenantId, status: "ACTIVE", remainingUses: { gte: input.uses } },
-    data: { remainingUses: { decrement: input.uses } },
-  });
+  const consumed = await tx.customerPackage.updateMany({ where: { id: membership.id, tenantId: input.tenantId, status: "ACTIVE", remainingUses: { gte: input.uses } }, data: { remainingUses: { decrement: input.uses } } });
   if (consumed.count !== 1) throw new Error("Los usos del paquete cambiaron mientras reservabas. Volvé a intentar.");
-
-  await tx.packageUsage.create({
-    data: {
-      tenantId: input.tenantId,
-      customerPackageId: membership.id,
-      bookingId: input.bookingId,
-      uses: input.uses,
-    },
-  });
-
+  await tx.packageUsage.create({ data: { tenantId: input.tenantId, customerPackageId: membership.id, bookingId: input.bookingId, uses: input.uses } });
   const updated = await tx.customerPackage.findUniqueOrThrow({ where: { id: membership.id }, select: { remainingUses: true } });
   if (updated.remainingUses === 0) await tx.customerPackage.update({ where: { id: membership.id }, data: { status: "EXHAUSTED" } });
 }
 
 export async function restorePackageUsageForBooking(tx: Prisma.TransactionClient, tenantId: string, bookingId: string) {
-  const usage = await tx.packageUsage.findFirst({
-    where: { tenantId, bookingId },
-    include: { customerPackage: { select: { id: true, status: true, expiresAt: true } } },
-  });
+  const usage = await tx.packageUsage.findFirst({ where: { tenantId, bookingId }, include: { customerPackage: { select: { id: true, status: true, expiresAt: true } } } });
   if (!usage) return false;
-
   await tx.packageUsage.delete({ where: { id: usage.id } });
   const expired = Boolean(usage.customerPackage.expiresAt && usage.customerPackage.expiresAt < new Date());
   const status = usage.customerPackage.status === "CANCELLED" ? "CANCELLED" : expired ? "EXPIRED" : "ACTIVE";
-  await tx.customerPackage.update({
-    where: { id: usage.customerPackage.id },
-    data: { remainingUses: { increment: usage.uses }, status },
-  });
+  await tx.customerPackage.update({ where: { id: usage.customerPackage.id }, data: { remainingUses: { increment: usage.uses }, status } });
   return true;
 }

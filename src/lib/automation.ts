@@ -10,6 +10,20 @@ import { configuredNotificationProviders } from "./notifications/providers";
 
 export type AutomationEvent = "BOOKING_CREATED" | "BOOKING_REMINDER" | "BOOKING_CANCELLED";
 export type AutomationTemplate = { subject?: string; text: string };
+export type AutomationRuleInput = {
+  name: string;
+  event: AutomationEvent;
+  channel: NotificationChannel;
+  offsetMinutes: number;
+  template: AutomationTemplate;
+};
+
+async function validateAutomationInput(tenantId: string, input: AutomationRuleInput) {
+  if (input.channel === "PUSH") throw new Error("Push todavía no tiene provider configurado");
+  const features = await effectiveFeatures(tenantId);
+  if (input.channel === "WHATSAPP" && !features.whatsappNotifications) throw new Error("WhatsApp no está habilitado en el plan actual");
+  if (!input.template.text.trim()) throw new Error("El mensaje no puede estar vacío");
+}
 
 export async function getAutomationData(tenantId: string) {
   return Promise.all([
@@ -18,22 +32,27 @@ export async function getAutomationData(tenantId: string) {
   ] as const);
 }
 
-export async function createAutomationRule(tenantId: string, input: {
-  name: string;
-  event: AutomationEvent;
-  channel: NotificationChannel;
-  offsetMinutes: number;
-  template: AutomationTemplate;
-}, actorId: string) {
-  if (input.channel === "PUSH") throw new Error("Push todavía no tiene provider configurado");
-  const features = await effectiveFeatures(tenantId);
-  if (input.channel === "WHATSAPP" && !features.whatsappNotifications) throw new Error("WhatsApp no está habilitado en el plan actual");
-  if (!input.template.text.trim()) throw new Error("El mensaje no puede estar vacío");
+export async function createAutomationRule(tenantId: string, input: AutomationRuleInput, actorId: string) {
+  await validateAutomationInput(tenantId, input);
   return platformDb.$transaction(async (tx) => {
     const rule = await tx.automationRule.create({ data: { tenantId, ...input, template: input.template } });
     await tx.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: "automation.created", entityType: "AutomationRule", entityId: rule.id, metadata: { event: input.event, channel: input.channel, offsetMinutes: input.offsetMinutes } } });
     return rule;
   });
+}
+
+export async function updateAutomationRule(tenantId: string, ruleId: string, input: AutomationRuleInput, actorId: string) {
+  await validateAutomationInput(tenantId, input);
+  const current = await platformDb.automationRule.findFirst({ where: { id: ruleId, tenantId } });
+  if (!current) throw new Error("Automatización inexistente");
+  const updated = await platformDb.automationRule.update({
+    where: { id: current.id },
+    data: { name: input.name, event: input.event, channel: input.channel, offsetMinutes: input.offsetMinutes, template: input.template },
+  });
+  await platformDb.auditLog.create({
+    data: { scope: "TENANT", tenantId, actorId, action: "automation.updated", entityType: "AutomationRule", entityId: current.id, metadata: { event: input.event, channel: input.channel, offsetMinutes: input.offsetMinutes } },
+  });
+  return updated;
 }
 
 export async function toggleAutomationRule(tenantId: string, ruleId: string, enabled: boolean, actorId: string) {
