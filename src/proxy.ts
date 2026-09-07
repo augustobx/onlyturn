@@ -2,7 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { isPlatformHostname, normalizeHostname, tenantSlugFromHostname } from "@/lib/hostnames";
 
 const PUBLIC_TENANT_PATHS = new Set(["/", "/cuenta", "/mi-cuenta", "/registro", "/payment"]);
-const TENANT_ADMIN_PREFIXES = ["/agenda", "/clientes", "/configuracion", "/disponibilidad", "/sesiones", "/lista-espera", "/extras", "/onboarding"];
+const TENANT_ADMIN_PREFIXES = [
+  "/agenda",
+  "/clientes",
+  "/configuracion",
+  "/disponibilidad",
+  "/sesiones",
+  "/recurrencias",
+  "/lista-espera",
+  "/extras",
+  "/politicas",
+  "/automatizaciones",
+  "/calendario",
+  "/reportes",
+  "/onboarding",
+];
 
 function tenantAdminInternalPath(pathname: string): string | null {
   if (pathname === "/dashboard") return "/app";
@@ -27,10 +41,7 @@ function withTenantHeader(request: NextRequest, slug: string) {
 
 export default function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  if (pathname.startsWith("/_next") || pathname.startsWith("/api") || pathname === "/favicon.ico") {
-    return NextResponse.next();
-  }
+  if (pathname.startsWith("/_next") || pathname.startsWith("/api") || pathname === "/favicon.ico") return NextResponse.next();
 
   const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0];
   const hostname = normalizeHostname(forwardedHost || request.headers.get("host") || "");
@@ -43,18 +54,13 @@ export default function proxy(request: NextRequest) {
 
   const slug = tenantSlugFromHostname(hostname);
   if (!slug) return NextResponse.next();
-
   if (pathname.startsWith("/superadmin")) return NextResponse.redirect(new URL("/login", request.url));
 
-  if (pathname === "/app" || pathname.startsWith("/app/")) {
-    return NextResponse.redirect(new URL(canonicalTenantPath(pathname), request.url));
-  }
-
+  if (pathname === "/app" || pathname.startsWith("/app/")) return NextResponse.redirect(new URL(canonicalTenantPath(pathname), request.url));
   if (pathname === "/catalogo" || pathname.startsWith("/catalogo/")) {
     const target = pathname === "/catalogo" ? "/servicios" : `/servicios${pathname.slice("/catalogo".length)}`;
     return NextResponse.redirect(new URL(target, request.url));
   }
-
   if (pathname === "/login" || pathname === "/suspendido") return NextResponse.next();
 
   if (pathname === "/manifest.webmanifest") {
@@ -77,10 +83,7 @@ export default function proxy(request: NextRequest) {
   }
 
   if (pathname.startsWith("/r/")) return NextResponse.redirect(new URL("/", request.url));
-
   return NextResponse.next();
 }
 
-export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
-};
+export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"] };
