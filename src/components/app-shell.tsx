@@ -69,7 +69,6 @@ export function AppShell({ children, tenantName, userName, superAdmin = false, p
   const [helpOpen, setHelpOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(pendingRegistrations);
 
-  useEffect(() => { setPendingCount(pendingRegistrations); }, [pendingRegistrations]);
   useEffect(() => {
     if (superAdmin) return;
     let active = true;
