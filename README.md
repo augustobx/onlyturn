@@ -10,12 +10,12 @@ El proyecto está preparado para producción con Next.js 16, React 19, TypeScrip
 - **Panel del tenant:** `/app`
 - **Reserva pública:** `/r/[slug]`
 - **Dominio de plataforma:** `onlyturn.nanoapps.ar`
-- **Dominio de tenant:** `<slug>.onlyturn.nanoapps.ar`
+- **Dominio de tenant:** `<slug>.nanoapps.ar`
 - **Base:** PostgreSQL compartido con aislamiento obligatorio por `tenantId`
 - **Proxy:** red externa Docker `proxy`
 - **Base de datos:** accesible únicamente por la red interna `onlyturn-internal`
 
-OnlyTurn no debe resolver hosts genéricos `<slug>.nanoapps.ar`; cada tenant queda aislado dentro del namespace del producto.
+El wildcard `*.nanoapps.ar` pertenece al `nanoapps-router` central. El router consulta `/api/internal/caddy/ask?domain=...` de cada SaaS y envía el hostname al servicio que declara ser su propietario. OnlyTurn responde como propietario únicamente cuando el slug existe en su propia base y el tenant está activo o en trial.
 
 ## Producción con Docker
 
