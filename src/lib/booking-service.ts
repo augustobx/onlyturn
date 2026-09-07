@@ -1,9 +1,11 @@
 import "server-only";
+
 import { addDays, endOfDay, startOfDay } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { platformDb } from "./db";
 import { calculateSlots, intersectRanges, weekdayInTimezone, type MinuteRange } from "./availability";
 import { reconcileTenantMembership } from "./membership";
+import { expirePendingBookingPayments } from "./payment-expiry";
 
 export async function getPublicTenant(slug: string) {
   const tenant = await platformDb.tenant.findFirst({
@@ -29,9 +31,15 @@ export async function getPublicCatalog(tenantId: string) {
         name: true,
         description: true,
         category: true,
+        bookingType: true,
+        assignmentStrategy: true,
         durationMinutes: true,
         preparationMinutes: true,
         bufferMinutes: true,
+        minPartySize: true,
+        maxPartySize: true,
+        allowWaitlist: true,
+        allowRecurring: true,
         priceCents: true,
         color: true,
         professionalMode: true,
@@ -79,28 +87,7 @@ export async function getAvailableSlots(input: {
   date: string;
 }) {
   const tenant = await platformDb.tenant.findUniqueOrThrow({ where: { id: input.tenantId } });
-
-  const expired = await platformDb.paymentTransaction.findMany({
-    where: {
-      tenantId: input.tenantId,
-      expiresAt: { lt: new Date() },
-      status: { in: ["PENDING", "FAILED"] },
-      booking: { status: "PENDING", consumesCapacity: true },
-    },
-    select: { id: true, bookingId: true },
-  });
-  if (expired.length) {
-    await platformDb.$transaction([
-      platformDb.booking.updateMany({
-        where: { tenantId: input.tenantId, id: { in: expired.map((item) => item.bookingId) }, status: "PENDING" },
-        data: { status: "CANCELLED", consumesCapacity: false, cancellationReason: "Tiempo de pago vencido", cancelledAt: new Date() },
-      }),
-      platformDb.paymentTransaction.updateMany({
-        where: { id: { in: expired.map((item) => item.id) } },
-        data: { status: "FAILED", rawStatus: "expired" },
-      }),
-    ]);
-  }
+  await expirePendingBookingPayments(input.tenantId);
 
   const settings = tenant.settings as { intervalMinutes?: number; minimumNoticeMinutes?: number; maximumAdvanceDays?: number };
   const today = formatInTimeZone(new Date(), tenant.timezone, "yyyy-MM-dd");
@@ -124,6 +111,7 @@ export async function getAvailableSlots(input: {
     }),
   ]);
 
+  if (service.bookingType === "CLASS" || service.bookingType === "EVENT") throw new Error("Este tipo de reserva utiliza sesiones programadas");
   if (!service.locations.some((item) => item.locationId === location.id)) throw new Error("Este servicio no está disponible en la sede seleccionada");
   if (input.professionalId && !service.professionals.some((item) => item.professionalId === input.professionalId)) throw new Error("Ese profesional no atiende este servicio");
   if (input.resourceId && !service.resources.some((item) => item.resourceId === input.resourceId)) throw new Error("Ese recurso no está habilitado para este servicio");
@@ -131,11 +119,19 @@ export async function getAvailableSlots(input: {
   if (service.resourceMode === "REQUIRED" && !input.resourceId) throw new Error("Seleccioná un recurso");
 
   const weekday = weekdayInTimezone(input.date, tenant.timezone);
+  const dayReference = new Date(`${input.date}T12:00:00Z`);
+  const rangeStart = startOfDay(addDays(dayReference, -1));
+  const rangeEnd = endOfDay(addDays(dayReference, 1));
+
   const rules = await platformDb.availabilityRule.findMany({
     where: {
       tenantId: input.tenantId,
       weekday,
       isActive: true,
+      AND: [
+        { OR: [{ validFrom: null }, { validFrom: { lte: rangeEnd } }] },
+        { OR: [{ validUntil: null }, { validUntil: { gte: rangeStart } }] },
+      ],
       OR: [
         { ownerType: "TENANT" },
         { ownerType: "LOCATION", locationId: input.locationId },
@@ -151,28 +147,24 @@ export async function getAvailableSlots(input: {
   if (input.resourceId && group("RESOURCE").length) groups.push(group("RESOURCE"));
   if (!groups.length) return [];
 
-  const dayReference = new Date(`${input.date}T12:00:00Z`);
-  const rangeStart = startOfDay(addDays(dayReference, -1));
-  const rangeEnd = endOfDay(addDays(dayReference, 1));
-
   const bookingAssignmentFilters = [
     ...(input.professionalId ? [{ professionalId: input.professionalId }] : []),
     ...(input.resourceId ? [{ resourceId: input.resourceId }] : []),
   ];
 
   const [bookings, exceptions] = await Promise.all([
-    bookingAssignmentFilters.length
-      ? platformDb.booking.findMany({
-          where: {
-            tenantId: input.tenantId,
-            consumesCapacity: true,
-            capacityStartsAt: { lt: rangeEnd },
-            capacityEndsAt: { gt: rangeStart },
-            OR: bookingAssignmentFilters,
-          },
-          select: { capacityStartsAt: true, capacityEndsAt: true },
-        })
-      : Promise.resolve([]),
+    platformDb.booking.findMany({
+      where: {
+        tenantId: input.tenantId,
+        consumesCapacity: true,
+        capacityStartsAt: { lt: rangeEnd },
+        capacityEndsAt: { gt: rangeStart },
+        ...(bookingAssignmentFilters.length
+          ? { OR: bookingAssignmentFilters }
+          : { serviceId: service.id, locationId: input.locationId, professionalId: null, resourceId: null }),
+      },
+      select: { capacityStartsAt: true, capacityEndsAt: true },
+    }),
     platformDb.availabilityException.findMany({
       where: {
         tenantId: input.tenantId,
