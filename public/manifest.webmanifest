@@ -1,10 +1,15 @@
 {
-  "name": "OnlyTurn",
+  "name": "OnlyTurn · NanoLabs",
   "short_name": "OnlyTurn",
-  "description": "Gestión universal de turnos y reservas",
+  "description": "Gestión profesional de turnos y reservas",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f6f7fb",
-  "theme_color": "#5b5cf0",
-  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "lang": "es-AR",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
 }
