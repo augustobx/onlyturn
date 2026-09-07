@@ -6,9 +6,16 @@ import { cancelBookingSeriesAction, createBookingSeriesAction } from "@/app/acti
 const weekdays = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const typeLabels = { APPOINTMENT: "Cita", CLASS: "Clase", EVENT: "Evento", RESOURCE: "Recurso" } as const;
 
+function uniqueById<T extends { id: string }>(items: T[]): T[] {
+  return [...new Map(items.map((item) => [item.id, item] as const)).values()];
+}
+
 export default async function RecurrencePage() {
   const { membership, tenant } = await requireTenantSession();
   const [services, customers, series] = await getRecurrenceData(membership.tenantId);
+  const locations = uniqueById(services.flatMap((service) => service.locations.map((item) => item.location)));
+  const professionals = uniqueById(services.flatMap((service) => service.professionals.map((item) => item.professional)));
+  const resources = uniqueById(services.flatMap((service) => service.resources.map((item) => item.resource)));
 
   return (
     <>
@@ -22,11 +29,11 @@ export default async function RecurrencePage() {
         <form action={createBookingSeriesAction} className="card">
           <div className="section-head"><h2><Repeat2 size={17} /> Nueva serie</h2></div>
           <div className="field"><label>Servicio *</label><select className="select" name="serviceId" required defaultValue=""><option value="" disabled>Seleccionar</option>{services.map((service) => <option value={service.id} key={service.id}>{service.name} · {typeLabels[service.bookingType]}</option>)}</select></div>
-          <div className="field"><label>Sucursal *</label><select className="select" name="locationId" required defaultValue=""><option value="" disabled>Seleccionar</option>{[...new Map(services.flatMap((service) => service.locations.map((item) => [item.location.id, item.location])).values())].map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></div>
+          <div className="field"><label>Sucursal *</label><select className="select" name="locationId" required defaultValue=""><option value="" disabled>Seleccionar</option>{locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></div>
           <div className="field"><label>Cliente</label><select className="select" name="customerId" defaultValue=""><option value="">No aplica / clase o evento</option>{customers.map((customer) => <option value={customer.id} key={customer.id}>{customer.firstName} {customer.lastName ?? ""} · {customer.phone}</option>)}</select><small className="muted">Obligatorio para citas y reservas 1:1; no se usa para sesiones grupales.</small></div>
           <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div className="field"><label>Profesional</label><select className="select" name="professionalId" defaultValue=""><option value="">Sin asignar</option>{[...new Map(services.flatMap((service) => service.professionals.map((item) => [item.professional.id, item.professional])).values())].map((professional) => <option value={professional.id} key={professional.id}>{professional.name}</option>)}</select></div>
-            <div className="field"><label>Recurso</label><select className="select" name="resourceId" defaultValue=""><option value="">Sin asignar</option>{[...new Map(services.flatMap((service) => service.resources.map((item) => [item.resource.id, item.resource])).values())].map((resource) => <option value={resource.id} key={resource.id}>{resource.name}</option>)}</select></div>
+            <div className="field"><label>Profesional</label><select className="select" name="professionalId" defaultValue=""><option value="">Sin asignar</option>{professionals.map((professional) => <option value={professional.id} key={professional.id}>{professional.name}</option>)}</select></div>
+            <div className="field"><label>Recurso</label><select className="select" name="resourceId" defaultValue=""><option value="">Sin asignar</option>{resources.map((resource) => <option value={resource.id} key={resource.id}>{resource.name}</option>)}</select></div>
           </div>
           <div className="field"><label>Primera ocurrencia *</label><input className="input" type="datetime-local" name="anchorLocal" required /></div>
           <div className="grid" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
