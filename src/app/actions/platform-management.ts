@@ -102,7 +102,11 @@ export async function renewMembershipAction(formData: FormData) {
         action: "membership.renewed",
         entityType: "Subscription",
         entityId: subscription.id,
-        metadata: { days: input.days, previousEnd: subscription.currentPeriodEnd, currentPeriodEnd },
+        metadata: {
+          days: input.days,
+          previousEnd: subscription.currentPeriodEnd.toISOString(),
+          currentPeriodEnd: currentPeriodEnd.toISOString(),
+        },
       },
     }),
   ]);
