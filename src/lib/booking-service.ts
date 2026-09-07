@@ -3,12 +3,16 @@ import { addDays, endOfDay, startOfDay } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { platformDb } from "./db";
 import { calculateSlots, intersectRanges, weekdayInTimezone, type MinuteRange } from "./availability";
+import { reconcileTenantMembership } from "./membership";
 
 export async function getPublicTenant(slug: string) {
-  return platformDb.tenant.findFirst({
-    where: { slug, status: { in: ["ACTIVE", "TRIAL"] }, archivedAt: null },
+  const tenant = await platformDb.tenant.findFirst({
+    where: { slug, archivedAt: null },
     select: { id: true, slug: true, name: true, timezone: true, currency: true, settings: true, branding: true }
   });
+  if (!tenant) return null;
+  const access = await reconcileTenantMembership(tenant.id);
+  return access?.allowed ? tenant : null;
 }
 
 export async function getPublicCatalog(tenantId: string) {
