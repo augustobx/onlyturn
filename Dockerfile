@@ -9,6 +9,7 @@ WORKDIR /app
 RUN apk add --no-cache openssl
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN sed -i 's/\r$//' scripts/*.sh 2>/dev/null && chmod +x scripts/*.sh 2>/dev/null || true
 RUN npx prisma generate && npm run build
 
 FROM node:22-alpine AS runner
