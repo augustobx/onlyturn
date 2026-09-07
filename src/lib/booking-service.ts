@@ -16,6 +16,8 @@ type BookingPolicy = {
   rescheduleHours?: number;
 };
 
+export type AvailableSlot = { startsAt: Date; endsAt: Date };
+
 export async function getPublicTenant(slug: string) {
   const tenant = await platformDb.tenant.findFirst({
     where: { slug, archivedAt: null },
@@ -112,7 +114,7 @@ export async function getAvailableSlots(input: {
   resourceId?: string;
   addonIds?: string[];
   date: string;
-}) {
+}): Promise<AvailableSlot[]> {
   const tenant = await platformDb.tenant.findUniqueOrThrow({ where: { id: input.tenantId } });
   await expirePendingBookingPayments(input.tenantId);
 
@@ -140,19 +142,17 @@ export async function getAvailableSlots(input: {
   const needsAutomaticProfessional = automatic && !input.professionalId && service.professionalMode !== "NONE";
   const needsAutomaticResource = automatic && !input.resourceId && service.resourceMode !== "NONE";
   if (needsAutomaticProfessional || needsAutomaticResource) {
-    const professionalCandidates = needsAutomaticProfessional
+    const professionalCandidates: Array<string | undefined> = needsAutomaticProfessional
       ? service.professionals.map((item) => item.professionalId)
       : [input.professionalId];
-    const resourceCandidates = needsAutomaticResource
+    const resourceCandidates: Array<string | undefined> = needsAutomaticResource
       ? service.resources.map((item) => item.resourceId)
       : [input.resourceId];
     if (!professionalCandidates.length || !resourceCandidates.length) return [];
 
-    const combinations = professionalCandidates.flatMap((professionalId) =>
-      resourceCandidates.map((resourceId) => ({ professionalId, resourceId })),
-    );
-    const batches = await Promise.all(combinations.map((candidate) => getAvailableSlots({ ...input, ...candidate })));
-    const unique = new Map<number, (typeof batches)[number][number]>();
+    const combinations = professionalCandidates.flatMap((professionalId) => resourceCandidates.map((resourceId) => ({ professionalId, resourceId })));
+    const batches: AvailableSlot[][] = await Promise.all(combinations.map((candidate): Promise<AvailableSlot[]> => getAvailableSlots({ ...input, ...candidate })));
+    const unique = new Map<number, AvailableSlot>();
     for (const slot of batches.flat()) unique.set(slot.startsAt.getTime(), slot);
     return [...unique.values()].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
   }
