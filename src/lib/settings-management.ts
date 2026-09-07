@@ -16,16 +16,8 @@ export async function getSettingsManagementData(tenantId: string) {
       orderBy: { startsAt: "asc" },
       take: 100,
     }),
-    platformDb.mediaAsset.findMany({
-      where: { tenantId },
-      orderBy: [{ archivedAt: "asc" }, { createdAt: "desc" }],
-      take: 100,
-    }),
-    platformDb.announcement.findMany({
-      where: { tenantId },
-      orderBy: [{ isActive: "desc" }, { startsAt: "desc" }],
-      take: 100,
-    }),
+    platformDb.mediaAsset.findMany({ where: { tenantId }, orderBy: [{ archivedAt: "asc" }, { createdAt: "desc" }], take: 100 }),
+    platformDb.announcement.findMany({ where: { tenantId }, orderBy: [{ isActive: "desc" }, { startsAt: "desc" }], take: 100 }),
     platformDb.customDomain.findMany({ where: { tenantId }, orderBy: { createdAt: "desc" } }),
   ] as const);
 }
@@ -33,14 +25,7 @@ export async function getSettingsManagementData(tenantId: string) {
 export async function updateCustomField(
   tenantId: string,
   fieldId: string,
-  data: {
-    serviceId?: string;
-    label: string;
-    type: CustomFieldType;
-    required: boolean;
-    appliesToCustomer: boolean;
-    options?: Prisma.InputJsonValue;
-  },
+  data: { serviceId?: string; label: string; type: CustomFieldType; required: boolean; appliesToCustomer: boolean; options?: Prisma.InputJsonValue },
   actorId: string,
 ) {
   const current = await platformDb.customField.findFirst({ where: { id: fieldId, tenantId } });
@@ -48,14 +33,7 @@ export async function updateCustomField(
   if (data.serviceId && !await platformDb.service.findFirst({ where: { id: data.serviceId, tenantId, isActive: true } })) throw new Error("Servicio inválido");
   const updated = await platformDb.customField.update({
     where: { id: current.id },
-    data: {
-      serviceId: data.serviceId || null,
-      label: data.label,
-      type: data.type,
-      required: data.required,
-      appliesToCustomer: data.appliesToCustomer,
-      options: data.options ?? Prisma.JsonNull,
-    },
+    data: { serviceId: data.serviceId || null, label: data.label, type: data.type, required: data.required, appliesToCustomer: data.appliesToCustomer, options: data.options ?? [] },
   });
   await platformDb.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: "custom_field.updated", entityType: "CustomField", entityId: current.id } });
   return updated;
@@ -65,9 +43,7 @@ export async function setCustomFieldActive(tenantId: string, fieldId: string, is
   const current = await platformDb.customField.findFirst({ where: { id: fieldId, tenantId } });
   if (!current) throw new Error("Campo personalizado inexistente");
   const updated = await platformDb.customField.update({ where: { id: current.id }, data: { isActive } });
-  await platformDb.auditLog.create({
-    data: { scope: "TENANT", tenantId, actorId, action: isActive ? "custom_field.reactivated" : "custom_field.archived", entityType: "CustomField", entityId: current.id },
-  });
+  await platformDb.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: isActive ? "custom_field.reactivated" : "custom_field.archived", entityType: "CustomField", entityId: current.id } });
   return updated;
 }
 
@@ -76,17 +52,7 @@ export async function cancelAvailabilityException(tenantId: string, exceptionId:
   if (!current) throw new Error("Bloqueo inexistente");
   await platformDb.$transaction([
     platformDb.availabilityException.delete({ where: { id: current.id } }),
-    platformDb.auditLog.create({
-      data: {
-        scope: "TENANT",
-        tenantId,
-        actorId,
-        action: "availability.exception_cancelled",
-        entityType: "AvailabilityException",
-        entityId: current.id,
-        metadata: { startsAt: current.startsAt.toISOString(), endsAt: current.endsAt.toISOString(), reason: current.reason },
-      },
-    }),
+    platformDb.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: "availability.exception_cancelled", entityType: "AvailabilityException", entityId: current.id, metadata: { startsAt: current.startsAt.toISOString(), endsAt: current.endsAt.toISOString(), reason: current.reason } } }),
   ]);
 }
 
@@ -99,10 +65,7 @@ export async function updateAnnouncement(
   const current = await platformDb.announcement.findFirst({ where: { id: announcementId, tenantId } });
   if (!current) throw new Error("Anuncio inexistente");
   if (data.endsAt && data.endsAt <= data.startsAt) throw new Error("La fecha de fin debe ser posterior al inicio");
-  const updated = await platformDb.announcement.update({
-    where: { id: current.id },
-    data: { title: data.title, body: data.body, startsAt: data.startsAt, endsAt: data.endsAt || null, style: data.style },
-  });
+  const updated = await platformDb.announcement.update({ where: { id: current.id }, data: { title: data.title, body: data.body, startsAt: data.startsAt, endsAt: data.endsAt || null, style: data.style } });
   await platformDb.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: "announcement.updated", entityType: "Announcement", entityId: current.id } });
   return updated;
 }
@@ -111,9 +74,7 @@ export async function setAnnouncementActive(tenantId: string, announcementId: st
   const current = await platformDb.announcement.findFirst({ where: { id: announcementId, tenantId } });
   if (!current) throw new Error("Anuncio inexistente");
   const updated = await platformDb.announcement.update({ where: { id: current.id }, data: { isActive } });
-  await platformDb.auditLog.create({
-    data: { scope: "TENANT", tenantId, actorId, action: isActive ? "announcement.reactivated" : "announcement.archived", entityType: "Announcement", entityId: current.id },
-  });
+  await platformDb.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: isActive ? "announcement.reactivated" : "announcement.archived", entityType: "Announcement", entityId: current.id } });
   return updated;
 }
 
@@ -137,9 +98,7 @@ export async function setMediaAssetActive(tenantId: string, assetId: string, isA
   const updated = await platformDb.$transaction(async (tx) => {
     const asset = await tx.mediaAsset.update({ where: { id: current.id }, data: { archivedAt: isActive ? null : new Date() } });
     if (brandingKey) await tx.tenant.update({ where: { id: tenantId }, data: { branding: branding as Prisma.InputJsonObject } });
-    await tx.auditLog.create({
-      data: { scope: "TENANT", tenantId, actorId, action: isActive ? "media.reactivated" : "media.archived", entityType: "MediaAsset", entityId: current.id, metadata: { kind: current.kind as MediaAssetKind } },
-    });
+    await tx.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: isActive ? "media.reactivated" : "media.archived", entityType: "MediaAsset", entityId: current.id, metadata: { kind: current.kind as MediaAssetKind } } });
     return asset;
   });
   return updated;
