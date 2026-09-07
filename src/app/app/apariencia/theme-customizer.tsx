@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { Check, Palette, RotateCcw, Smartphone } from "lucide-react";
