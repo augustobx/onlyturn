@@ -4,6 +4,7 @@ import "./nanolabs.css";
 import "./admin-ux.css";
 import "./pwa-themes.css";
 import "./setup-center.css";
+import "./setup-polish.css";
 import { PwaRegister } from "@/components/pwa-register";
 
 const baseUrl = process.env.APP_BASE_URL || "https://onlyturn.nanoapps.ar";
