@@ -34,9 +34,9 @@ async function validateOwner(tenantId: string, input: WeeklyAvailabilityInput) {
 export async function getAvailabilityManagementData(tenantId: string) {
   return Promise.all([
     platformDb.availabilityRule.findMany({
-      where: { tenantId, isActive: true },
+      where: { tenantId },
       include: { location: true, professional: true, resource: true },
-      orderBy: [{ ownerType: "asc" }, { weekday: "asc" }, { startMinute: "asc" }],
+      orderBy: [{ isActive: "desc" }, { ownerType: "asc" }, { weekday: "asc" }, { startMinute: "asc" }],
     }),
     platformDb.location.findMany({ where: { tenantId, isActive: true }, orderBy: { name: "asc" } }),
     platformDb.professional.findMany({ where: { tenantId, isActive: true }, orderBy: { name: "asc" } }),
@@ -75,35 +75,59 @@ export async function createWeeklyAvailability(tenantId: string, input: WeeklyAv
         actorId,
         action: "availability.rules_created",
         entityType: "AvailabilityRule",
-        metadata: {
-          ownerType: input.ownerType,
-          weekdays: uniqueWeekdays,
-          startMinute: input.startMinute,
-          endMinute: input.endMinute,
-          count: created.length,
-        },
+        metadata: { ownerType: input.ownerType, weekdays: uniqueWeekdays, startMinute: input.startMinute, endMinute: input.endMinute, count: created.length },
       },
     });
     return created;
   });
 }
 
-export async function deleteAvailabilityRule(tenantId: string, ruleId: string, actorId: string) {
-  const rule = await platformDb.availabilityRule.findFirst({ where: { id: ruleId, tenantId, isActive: true } });
-  if (!rule) throw new Error("Regla de disponibilidad inexistente");
+export async function updateAvailabilityRule(tenantId: string, ruleId: string, input: WeeklyAvailabilityInput, actorId: string) {
+  if (input.weekdays.length !== 1) throw new Error("Para editar una regla seleccioná un único día");
+  await validateOwner(tenantId, input);
+  const current = await platformDb.availabilityRule.findFirst({ where: { id: ruleId, tenantId } });
+  if (!current) throw new Error("Regla de disponibilidad inexistente");
 
-  await platformDb.$transaction([
-    platformDb.availabilityRule.update({ where: { id: rule.id }, data: { isActive: false } }),
-    platformDb.auditLog.create({
-      data: {
-        scope: "TENANT",
-        tenantId,
-        actorId,
-        action: "availability.rule_deleted",
-        entityType: "AvailabilityRule",
-        entityId: rule.id,
-        metadata: { ownerType: rule.ownerType, weekday: rule.weekday, startMinute: rule.startMinute, endMinute: rule.endMinute },
-      },
-    }),
-  ]);
+  const updated = await platformDb.availabilityRule.update({
+    where: { id: current.id },
+    data: {
+      ownerType: input.ownerType,
+      locationId: input.ownerType === "LOCATION" ? input.locationId : null,
+      professionalId: input.ownerType === "PROFESSIONAL" ? input.professionalId : null,
+      resourceId: input.ownerType === "RESOURCE" ? input.resourceId : null,
+      weekday: input.weekdays[0],
+      startMinute: input.startMinute,
+      endMinute: input.endMinute,
+      validFrom: input.validFrom ?? null,
+      validUntil: input.validUntil ?? null,
+    },
+  });
+  await platformDb.auditLog.create({
+    data: { scope: "TENANT", tenantId, actorId, action: "availability.rule_updated", entityType: "AvailabilityRule", entityId: current.id },
+  });
+  return updated;
+}
+
+export async function setAvailabilityRuleActive(tenantId: string, ruleId: string, isActive: boolean, actorId: string) {
+  const rule = await platformDb.availabilityRule.findFirst({ where: { id: ruleId, tenantId } });
+  if (!rule) throw new Error("Regla de disponibilidad inexistente");
+  if (rule.isActive === isActive) return rule;
+
+  const updated = await platformDb.availabilityRule.update({ where: { id: rule.id }, data: { isActive } });
+  await platformDb.auditLog.create({
+    data: {
+      scope: "TENANT",
+      tenantId,
+      actorId,
+      action: isActive ? "availability.rule_reactivated" : "availability.rule_archived",
+      entityType: "AvailabilityRule",
+      entityId: rule.id,
+      metadata: { ownerType: rule.ownerType, weekday: rule.weekday, startMinute: rule.startMinute, endMinute: rule.endMinute },
+    },
+  });
+  return updated;
+}
+
+export async function deleteAvailabilityRule(tenantId: string, ruleId: string, actorId: string) {
+  return setAvailabilityRuleActive(tenantId, ruleId, false, actorId);
 }
