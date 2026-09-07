@@ -1,0 +1,155 @@
+:root {
+  --ink: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --surface: #ffffff;
+  --canvas: #f8fafc;
+  --brand: #2563eb;
+  --brand2: #0ea5e9;
+  --ok: #059669;
+  --danger: #dc2626;
+  --shadow: 0 18px 55px rgba(15, 23, 42, .08);
+}
+
+body { background: var(--canvas); }
+
+.nanolabs-shell { grid-template-columns: 260px minmax(0, 1fr); }
+.nanolabs-shell .sidebar {
+  padding: 22px 16px;
+  border-right: 1px solid #e7edf5;
+  background: rgba(255,255,255,.98);
+  box-shadow: 8px 0 30px rgba(15,23,42,.025);
+}
+.brand-onlyturn { padding: 0 6px 22px; gap: 10px; }
+.brand-onlyturn .brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  box-shadow: 0 8px 22px rgba(37,99,235,.24);
+}
+.brand-copy { display: grid; line-height: 1.05; }
+.brand-copy strong { font-size: 1.08rem; letter-spacing: -.02em; }
+.brand-copy small { margin-top: 5px; color: #64748b; font-size: .66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.mobile-close, .mobile-menu { display: none; border: 0; background: transparent; color: inherit; }
+
+.sidebar-context {
+  display: grid;
+  gap: 4px;
+  margin: 0 4px 16px;
+  padding: 12px 13px;
+  border: 1px solid #e6edf7;
+  border-radius: 13px;
+  background: #f8fbff;
+}
+.sidebar-context span { color: #7c8aa0; font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 750; }
+.sidebar-context strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; }
+
+.nanolabs-shell .nav { gap: 4px; }
+.nanolabs-shell .nav a { position: relative; padding: 11px 12px; border-radius: 11px; color: #526079; font-weight: 650; }
+.nanolabs-shell .nav a:hover { background: #f1f6ff; color: #1d4ed8; }
+.nanolabs-shell .nav a.active { background: #eaf2ff; color: #1d4ed8; }
+.nanolabs-shell .nav a.active::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: #2563eb; }
+
+.user-card { display: grid; grid-template-columns: 38px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+.user-card .avatar { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg,#2563eb,#0ea5e9); }
+.user-card div { min-width: 0; display: grid; gap: 2px; }
+.user-card strong { font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-card span:last-child { color: var(--muted); font-size: .7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logout-button { width: 100%; justify-content: flex-start; display: flex; gap: 8px; align-items: center; padding-left: 8px; }
+
+.nanolabs-shell .topbar {
+  height: 70px;
+  padding: 0 30px;
+  background: rgba(248,250,252,.9);
+  border-bottom: 1px solid rgba(226,232,240,.85);
+}
+.topbar-title { display: flex; gap: 10px; align-items: center; }
+.topbar-title > div { display: grid; line-height: 1.12; }
+.topbar-title span { color: #7c8aa0; font-size: .68rem; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
+.topbar-title strong { margin-top: 3px; font-size: .92rem; }
+.system-status { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid #dbe7df; border-radius: 999px; background: #f2fbf6; color: #087443; font-size: .72rem; font-weight: 750; }
+.system-status i { width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.12); }
+.nanolabs-shell .content { padding-top: 24px; }
+
+.page-title { margin-bottom: 18px; }
+.page-title h1 { letter-spacing: -.035em; font-size: clamp(1.65rem, 2.3vw, 2.05rem); }
+.eyebrow { color: #2563eb; }
+.card { border-color: #e4eaf2; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.025); }
+.card:hover { border-color: #d8e2ef; }
+.stat { min-height: 128px; }
+.stat strong { letter-spacing: -.04em; }
+.button { background: #2563eb; border-radius: 10px; box-shadow: 0 6px 16px rgba(37,99,235,.12); }
+.button:hover { filter: brightness(.97); }
+.button.secondary { background: #eaf2ff; color: #1d4ed8; box-shadow: none; }
+.pill { background: #eaf2ff; color: #1d4ed8; }
+.input:focus, .select:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.11); }
+
+.login-visual {
+  background: radial-gradient(circle at 16% 10%, rgba(14,165,233,.5) 0, transparent 31%), linear-gradient(145deg,#081a38,#0b2b5e 62%,#164e8f);
+}
+.login-visual .brand-mark { background: #fff; color: #2563eb; }
+.login-visual .eyebrow { color: #93c5fd !important; }
+.login-visual p { color: #cbdcf6; }
+
+.platform-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.platform-stat { min-height: 112px; }
+.platform-stat strong { display: block; margin-top: 8px; font-size: 1.7rem; letter-spacing: -.04em; }
+.platform-toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 18px 0 12px; }
+.platform-toolbar h2 { margin: 0; font-size: 1rem; }
+.tenant-cell { display: grid; gap: 3px; }
+.tenant-cell small { color: var(--muted); }
+.plan-name { font-weight: 750; }
+.status.TRIAL { color: #8a5a00; background: #fff7df; }
+.status.ACTIVE { color: #08785a; background: #e8faf3; }
+.status.SUSPENDED { color: #a6430b; background: #fff2e8; }
+.status.CANCELLED { color: #b42331; background: #fff0f1; }
+
+.dashboard-breakdown { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; }
+.dashboard-breakdown > div { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fbfdff; }
+.dashboard-breakdown span { display: block; color: var(--muted); font-size: .72rem; }
+.dashboard-breakdown strong { display: block; margin-top: 5px; font-size: 1.35rem; }
+
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 1100px) {
+  .platform-summary { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+
+@media (max-width: 900px) {
+  .nanolabs-shell { display: block; }
+  .nanolabs-shell .sidebar {
+    display: flex;
+    position: fixed;
+    z-index: 50;
+    top: 0;
+    left: 0;
+    width: min(292px, 86vw);
+    height: 100dvh;
+    transform: translateX(-105%);
+    transition: transform .2s ease;
+    box-shadow: 22px 0 55px rgba(15,23,42,.18);
+  }
+  .nanolabs-shell .sidebar.is-open { transform: translateX(0); }
+  .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 45; border: 0; background: rgba(15,23,42,.42); backdrop-filter: blur(2px); }
+  .mobile-close { display: inline-grid; place-items: center; margin-left: auto; width: 34px; height: 34px; border-radius: 9px; }
+  .mobile-menu { display: inline-grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .nanolabs-shell .topbar { padding: 0 18px; }
+  .nanolabs-shell .content { padding: 18px 18px 34px; }
+}
+
+@media (max-width: 640px) {
+  .platform-summary { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .card { padding: 15px; }
+  .system-status { padding: 6px 8px; }
+  .platform-toolbar { align-items: stretch; }
+  .dashboard-breakdown { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 420px) {
+  .platform-summary, .stats { grid-template-columns: 1fr; }
+  .dashboard-breakdown { grid-template-columns: 1fr 1fr; }
+  .topbar-title > div span { display: none; }
+}
