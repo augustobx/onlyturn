@@ -110,6 +110,37 @@ body { background: var(--canvas); }
 .dashboard-breakdown span { display: block; color: var(--muted); font-size: .72rem; }
 .dashboard-breakdown strong { display: block; margin-top: 5px; font-size: 1.35rem; }
 
+/* Consola global NanoLabs: separada visualmente del panel operativo de cada tenant. */
+.platform-shell { color: #e5edf8; background: #020617; }
+.platform-shell .main { min-height: 100vh; background: radial-gradient(circle at 90% 0, rgba(37,99,235,.08), transparent 28%), #020617; }
+.platform-shell .sidebar { background: #08111f; border-right-color: #172033; box-shadow: 8px 0 30px rgba(0,0,0,.18); }
+.platform-shell .brand-copy strong, .platform-shell .sidebar-context strong, .platform-shell .user-card strong { color: #f8fafc; }
+.platform-shell .brand-copy small, .platform-shell .user-card span:last-child { color: #7f91aa; }
+.platform-shell .sidebar-context { background: #0d1728; border-color: #1a2940; }
+.platform-shell .sidebar-context span { color: #7890ae; }
+.platform-shell .nav a { color: #8fa1b8; }
+.platform-shell .nav a:hover { color: #dbeafe; background: #101d32; }
+.platform-shell .nav a.active { color: #bfdbfe; background: #102444; }
+.platform-shell .topbar { background: rgba(2,6,23,.88); border-bottom-color: #172033; backdrop-filter: blur(12px); }
+.platform-shell .topbar-title span { color: #70839e; }
+.platform-shell .topbar-title strong { color: #f8fafc; }
+.platform-shell .content { color: #e5edf8; }
+.platform-shell .page-title h1, .platform-shell h2 { color: #f8fafc; }
+.platform-shell .muted { color: #8292a8 !important; }
+.platform-shell .card { color: #dbe5f2; background: #0b1322; border-color: #1b2a41; box-shadow: 0 12px 36px rgba(0,0,0,.12); }
+.platform-shell .card:hover { border-color: #263b59; }
+.platform-shell .input, .platform-shell .select, .platform-shell textarea.input { color: #edf4ff; background: #07101d; border-color: #24324a; }
+.platform-shell .input::placeholder { color: #53647b; }
+.platform-shell .button.secondary, .platform-shell .pill { color: #bfdbfe; background: #102444; }
+.platform-shell .button.ghost { color: #a8b8cc; background: transparent; }
+.platform-shell .table th { color: #8092aa; border-bottom-color: #23324a; }
+.platform-shell .table td { color: #dbe5f2; border-bottom-color: #162238; }
+.platform-shell .table tr:hover td { background: rgba(30,41,59,.34); }
+.platform-shell a:not(.button):not(.nav a) { color: #60a5fa; }
+.platform-shell .platform-stat { color: #dbe5f2; }
+.platform-shell .system-status { border-color: #174a39; background: #09271f; color: #6ee7b7; }
+.platform-shell .mobile-menu { border-color: #25344c; background: #0b1322; color: #e5edf8; }
+
 .sidebar-backdrop { display: none; }
 
 @media (max-width: 1100px) {
