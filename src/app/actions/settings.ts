@@ -65,21 +65,22 @@ export async function updateSettingsAction(formData: FormData) {
 export async function updateCustomerAccessSettingsAction(formData: FormData) {
   const { session, membership, tenant } = await authorize();
   const input = z.object({
-    customerAccessTitle: z.string().trim().min(3).max(120),
-    customerAccessMessage: z.string().trim().min(10).max(700),
-    customerPendingTitle: z.string().trim().min(3).max(120),
-    customerPendingMessage: z.string().trim().min(10).max(700),
+    customerAccessTitle: z.string().trim().min(3).max(120).optional(),
+    customerAccessMessage: z.string().trim().min(10).max(700).optional(),
+    customerPendingTitle: z.string().trim().min(3).max(120).optional(),
+    customerPendingMessage: z.string().trim().min(10).max(700).optional(),
   }).parse(Object.fromEntries(formData));
   const currentSettings = tenant.settings as Record<string, unknown>;
+  const text = (key: string, fallback: string) => typeof currentSettings[key] === "string" && String(currentSettings[key]).trim() ? String(currentSettings[key]) : fallback;
   await createTenantDb(membership.tenantId).updateSettings({
     settings: {
       ...currentSettings,
       customerRegistrationEnabled: formData.get("customerRegistrationEnabled") === "on",
       customerApprovalRequired: formData.get("customerApprovalRequired") === "on",
-      customerAccessTitle: input.customerAccessTitle,
-      customerAccessMessage: input.customerAccessMessage,
-      customerPendingTitle: input.customerPendingTitle,
-      customerPendingMessage: input.customerPendingMessage,
+      customerAccessTitle: input.customerAccessTitle ?? text("customerAccessTitle", "Para acceder a nuestros servicios necesitás una cuenta"),
+      customerAccessMessage: input.customerAccessMessage ?? text("customerAccessMessage", "Registrate una sola vez. Después vas a poder ver los servicios disponibles, reservar horarios y administrar tus turnos desde tu cuenta."),
+      customerPendingTitle: input.customerPendingTitle ?? text("customerPendingTitle", "Tu cuenta está en verificación"),
+      customerPendingMessage: input.customerPendingMessage ?? text("customerPendingMessage", `Recibimos tu registro correctamente. El equipo de ${tenant.name} va a revisar tus datos y, en breve, tu cuenta quedará habilitada para acceder a los servicios y gestionar tus reservas.`),
     },
     branding: tenant.branding as Prisma.InputJsonObject,
   }, session.userId);
