@@ -8,6 +8,14 @@ import { reconcileTenantMembership } from "./membership";
 import { expirePendingBookingPayments } from "./payment-expiry";
 import { resolveServiceAddons } from "./service-addons";
 
+type BookingPolicy = {
+  intervalMinutes?: number;
+  minimumNoticeMinutes?: number;
+  maximumAdvanceDays?: number;
+  cancellationHours?: number;
+  rescheduleHours?: number;
+};
+
 export async function getPublicTenant(slug: string) {
   const tenant = await platformDb.tenant.findFirst({
     where: { slug, archivedAt: null },
@@ -41,6 +49,7 @@ export async function getPublicCatalog(tenantId: string) {
         maxPartySize: true,
         allowWaitlist: true,
         allowRecurring: true,
+        bookingPolicy: true,
         priceCents: true,
         color: true,
         professionalMode: true,
@@ -63,7 +72,18 @@ export async function getPublicCatalog(tenantId: string) {
       orderBy: { sortOrder: "asc" },
     }),
   ]);
-  return [locations, services.map((service) => ({ ...service, customFields: [...globalFields, ...service.customFields] }))] as const;
+  return [
+    locations,
+    services.map((service) => {
+      const automatic = service.assignmentStrategy === "ANY_AVAILABLE" || service.assignmentStrategy === "ROUND_ROBIN";
+      return {
+        ...service,
+        professionalMode: automatic ? "NONE" as const : service.professionalMode,
+        resourceMode: automatic ? "NONE" as const : service.resourceMode,
+        customFields: [...globalFields, ...service.customFields],
+      };
+    }),
+  ] as const;
 }
 
 export async function getPublicExperience(tenantId: string) {
@@ -96,13 +116,6 @@ export async function getAvailableSlots(input: {
   const tenant = await platformDb.tenant.findUniqueOrThrow({ where: { id: input.tenantId } });
   await expirePendingBookingPayments(input.tenantId);
 
-  const settings = tenant.settings as { intervalMinutes?: number; minimumNoticeMinutes?: number; maximumAdvanceDays?: number };
-  const today = formatInTimeZone(new Date(), tenant.timezone, "yyyy-MM-dd");
-  const requestedDay = Date.parse(`${input.date}T00:00:00Z`);
-  const todayDay = Date.parse(`${today}T00:00:00Z`);
-  if (!Number.isFinite(requestedDay) || requestedDay < todayDay) return [];
-  if (requestedDay > todayDay + (settings.maximumAdvanceDays ?? 60) * 86_400_000) return [];
-
   const [service, location] = await Promise.all([
     platformDb.service.findFirstOrThrow({
       where: { id: input.serviceId, tenantId: input.tenantId, isActive: true, onlineEnabled: true },
@@ -122,8 +135,42 @@ export async function getAvailableSlots(input: {
   if (!service.locations.some((item) => item.locationId === location.id)) throw new Error("Este servicio no está disponible en la sede seleccionada");
   if (input.professionalId && !service.professionals.some((item) => item.professionalId === input.professionalId)) throw new Error("Ese profesional no atiende este servicio");
   if (input.resourceId && !service.resources.some((item) => item.resourceId === input.resourceId)) throw new Error("Ese recurso no está habilitado para este servicio");
+
+  const automatic = service.assignmentStrategy === "ANY_AVAILABLE" || service.assignmentStrategy === "ROUND_ROBIN";
+  const needsAutomaticProfessional = automatic && !input.professionalId && service.professionalMode !== "NONE";
+  const needsAutomaticResource = automatic && !input.resourceId && service.resourceMode !== "NONE";
+  if (needsAutomaticProfessional || needsAutomaticResource) {
+    const professionalCandidates = needsAutomaticProfessional
+      ? service.professionals.map((item) => item.professionalId)
+      : [input.professionalId];
+    const resourceCandidates = needsAutomaticResource
+      ? service.resources.map((item) => item.resourceId)
+      : [input.resourceId];
+    if (!professionalCandidates.length || !resourceCandidates.length) return [];
+
+    const combinations = professionalCandidates.flatMap((professionalId) =>
+      resourceCandidates.map((resourceId) => ({ professionalId, resourceId })),
+    );
+    const batches = await Promise.all(combinations.map((candidate) => getAvailableSlots({ ...input, ...candidate })));
+    const unique = new Map<number, (typeof batches)[number][number]>();
+    for (const slot of batches.flat()) unique.set(slot.startsAt.getTime(), slot);
+    return [...unique.values()].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  }
+
   if (service.professionalMode === "REQUIRED" && !input.professionalId) throw new Error("Seleccioná un profesional");
   if (service.resourceMode === "REQUIRED" && !input.resourceId) throw new Error("Seleccioná un recurso");
+
+  const tenantSettings = tenant.settings as { intervalMinutes?: number; minimumNoticeMinutes?: number; maximumAdvanceDays?: number };
+  const servicePolicy = (service.bookingPolicy ?? {}) as BookingPolicy;
+  const maximumAdvanceDays = servicePolicy.maximumAdvanceDays ?? tenantSettings.maximumAdvanceDays ?? 60;
+  const minimumNoticeMinutes = servicePolicy.minimumNoticeMinutes ?? tenantSettings.minimumNoticeMinutes ?? 120;
+  const intervalMinutes = servicePolicy.intervalMinutes ?? tenantSettings.intervalMinutes ?? 30;
+
+  const today = formatInTimeZone(new Date(), tenant.timezone, "yyyy-MM-dd");
+  const requestedDay = Date.parse(`${input.date}T00:00:00Z`);
+  const todayDay = Date.parse(`${today}T00:00:00Z`);
+  if (!Number.isFinite(requestedDay) || requestedDay < todayDay) return [];
+  if (requestedDay > todayDay + maximumAdvanceDays * 86_400_000) return [];
 
   const addons = await resolveServiceAddons(input.tenantId, service.id, input.addonIds ?? []);
   const addonDuration = addons.reduce((sum, addon) => sum + addon.durationMinutes, 0);
@@ -163,7 +210,7 @@ export async function getAvailableSlots(input: {
     ...(input.resourceId ? [{ resourceId: input.resourceId }] : []),
   ];
 
-  const [bookings, exceptions] = await Promise.all([
+  const [bookings, sessions, exceptions] = await Promise.all([
     platformDb.booking.findMany({
       where: {
         tenantId: input.tenantId,
@@ -176,6 +223,18 @@ export async function getAvailableSlots(input: {
       },
       select: { capacityStartsAt: true, capacityEndsAt: true },
     }),
+    bookingAssignmentFilters.length
+      ? platformDb.bookingSession.findMany({
+          where: {
+            tenantId: input.tenantId,
+            status: "SCHEDULED",
+            capacityStartsAt: { lt: rangeEnd },
+            capacityEndsAt: { gt: rangeStart },
+            OR: bookingAssignmentFilters,
+          },
+          select: { capacityStartsAt: true, capacityEndsAt: true },
+        })
+      : Promise.resolve([]),
     platformDb.availabilityException.findMany({
       where: {
         tenantId: input.tenantId,
@@ -199,12 +258,13 @@ export async function getAvailableSlots(input: {
     windows: intersectRanges(groups),
     busy: [
       ...bookings.map((booking) => ({ startsAt: booking.capacityStartsAt, endsAt: booking.capacityEndsAt })),
+      ...sessions.map((session) => ({ startsAt: session.capacityStartsAt, endsAt: session.capacityEndsAt })),
       ...exceptions,
     ],
     durationMinutes: service.durationMinutes + addonDuration,
     preparationMinutes: service.preparationMinutes + addonPreparation,
     bufferMinutes: service.bufferMinutes,
-    intervalMinutes: settings.intervalMinutes ?? 30,
-    minimumNoticeMinutes: settings.minimumNoticeMinutes ?? 120,
+    intervalMinutes,
+    minimumNoticeMinutes,
   });
 }
