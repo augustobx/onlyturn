@@ -6,6 +6,7 @@ import { platformDb } from "./db";
 import { calculateSlots, intersectRanges, weekdayInTimezone, type MinuteRange } from "./availability";
 import { reconcileTenantMembership } from "./membership";
 import { expirePendingBookingPayments } from "./payment-expiry";
+import { resolveServiceAddons } from "./service-addons";
 
 export async function getPublicTenant(slug: string) {
   const tenant = await platformDb.tenant.findFirst({
@@ -48,6 +49,11 @@ export async function getPublicCatalog(tenantId: string) {
         locations: { select: { locationId: true } },
         professionals: { select: { professional: { select: { id: true, name: true } } } },
         resources: { select: { resource: { select: { id: true, name: true, type: true } } } },
+        addons: {
+          where: { isActive: true },
+          select: { id: true, name: true, description: true, priceCents: true, durationMinutes: true, preparationMinutes: true },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        },
         customFields: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
       },
       orderBy: [{ category: "asc" }, { name: "asc" }],
@@ -84,6 +90,7 @@ export async function getAvailableSlots(input: {
   serviceId: string;
   professionalId?: string;
   resourceId?: string;
+  addonIds?: string[];
   date: string;
 }) {
   const tenant = await platformDb.tenant.findUniqueOrThrow({ where: { id: input.tenantId } });
@@ -117,6 +124,10 @@ export async function getAvailableSlots(input: {
   if (input.resourceId && !service.resources.some((item) => item.resourceId === input.resourceId)) throw new Error("Ese recurso no está habilitado para este servicio");
   if (service.professionalMode === "REQUIRED" && !input.professionalId) throw new Error("Seleccioná un profesional");
   if (service.resourceMode === "REQUIRED" && !input.resourceId) throw new Error("Seleccioná un recurso");
+
+  const addons = await resolveServiceAddons(input.tenantId, service.id, input.addonIds ?? []);
+  const addonDuration = addons.reduce((sum, addon) => sum + addon.durationMinutes, 0);
+  const addonPreparation = addons.reduce((sum, addon) => sum + addon.preparationMinutes, 0);
 
   const weekday = weekdayInTimezone(input.date, tenant.timezone);
   const dayReference = new Date(`${input.date}T12:00:00Z`);
@@ -190,8 +201,8 @@ export async function getAvailableSlots(input: {
       ...bookings.map((booking) => ({ startsAt: booking.capacityStartsAt, endsAt: booking.capacityEndsAt })),
       ...exceptions,
     ],
-    durationMinutes: service.durationMinutes,
-    preparationMinutes: service.preparationMinutes,
+    durationMinutes: service.durationMinutes + addonDuration,
+    preparationMinutes: service.preparationMinutes + addonPreparation,
     bufferMinutes: service.bufferMinutes,
     intervalMinutes: settings.intervalMinutes ?? 30,
     minimumNoticeMinutes: settings.minimumNoticeMinutes ?? 120,
