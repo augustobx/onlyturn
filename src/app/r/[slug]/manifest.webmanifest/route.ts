@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { getPublicTenant } from "@/lib/booking-service";
+import { resolvePublicTheme, type PublicBranding } from "@/lib/public-themes";
 
 export async function GET(_: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const tenant = await getPublicTenant(slug);
   if (!tenant) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const branding = tenant.branding as { primaryColor?: string; logoUrl?: string };
+  const branding = tenant.branding as PublicBranding;
+  const theme = resolvePublicTheme(branding);
   const icons = branding.logoUrl
     ? [{ src: branding.logoUrl, sizes: "512x512", purpose: "any maskable" }]
     : [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" }];
@@ -18,8 +20,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
     start_url: `/r/${slug}`,
     scope: `/r/${slug}`,
     display: "standalone",
-    background_color: "#f8fafc",
-    theme_color: branding.primaryColor ?? "#2563eb",
+    background_color: theme.background,
+    theme_color: theme.primary,
     lang: "es-AR",
     categories: ["business", "productivity"],
     icons,
