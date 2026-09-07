@@ -16,6 +16,6 @@ export async function getCustomerSession(tenantId?:string){
  return platformDb.customerSession.findFirst({where:{tokenHash:sha256(token),expiresAt:{gt:new Date()},...(tenantId?{tenantId}:{}),account:{status:"ACTIVE"}},include:{account:{include:{customer:true,tenant:true}}}});
 }
 
-export async function requireCustomerSession(tenantId:string,_slug:string){const session=await getCustomerSession(tenantId);if(!session)redirect("/cuenta");return session}
+export async function requireCustomerSession(tenantId:string){const session=await getCustomerSession(tenantId);if(!session)redirect("/cuenta");return session}
 
 export async function destroyCustomerSession(){const jar=await cookies();const token=jar.get(COOKIE_NAME)?.value;if(token)await platformDb.customerSession.deleteMany({where:{tokenHash:sha256(token)}});jar.delete(COOKIE_NAME)}
