@@ -63,7 +63,7 @@ const platformLinks: NavItem[] = [
   item("/superadmin/planes", "/superadmin/planes", "Planes", BriefcaseBusiness, "Define planes, límites y capacidades SaaS.", ["Revisá oferta vigente.", "Ajustá límites.", "Guardá cambios comerciales."]),
 ];
 
-export function AppShell({ children, tenantName, userName, superAdmin = false }: { children: React.ReactNode; tenantName: string; userName: string; superAdmin?: boolean }) {
+export function AppShell({ children, tenantName, userName, superAdmin = false, pendingRegistrations = 0 }: { children: React.ReactNode; tenantName: string; userName: string; superAdmin?: boolean; pendingRegistrations?: number }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -77,7 +77,10 @@ export function AppShell({ children, tenantName, userName, superAdmin = false }:
 
   const allItems = superAdmin ? platformLinks : [...primaryTenantLinks, ...advancedTenantLinks, ...hiddenSetupItems];
   const currentItem = allItems.find((navItem) => isActive(navItem.href, navItem.internal)) ?? allItems[0];
-  const renderLink = ({ href, internal, label, icon: Icon }: NavItem) => <Link className={isActive(href, internal) ? "active" : undefined} key={href} href={href} onClick={() => setOpen(false)}><Icon size={17} /><span>{label}</span></Link>;
+  const renderLink = ({ href, internal, label, icon: Icon }: NavItem) => {
+    const isCustomers = href === "/clientes";
+    return <Link className={isActive(href, internal) ? "active" : undefined} key={href} href={href} onClick={() => setOpen(false)}><Icon size={17} /><span>{label}</span>{!superAdmin && isCustomers && pendingRegistrations > 0 && <strong className="nav-alert-badge" aria-label={`${pendingRegistrations} registros pendientes`}>{pendingRegistrations > 99 ? "99+" : pendingRegistrations}</strong>}</Link>;
+  };
 
   return <div className={`shell nanolabs-shell ${superAdmin ? "platform-shell" : "tenant-shell"}`}>
     {open && <button className="sidebar-backdrop" aria-label="Cerrar menú" onClick={() => setOpen(false)} />}
@@ -102,7 +105,7 @@ export function AppShell({ children, tenantName, userName, superAdmin = false }:
     </aside>
 
     <main className="main">
-      <header className="topbar"><div className="topbar-title"><button className="mobile-menu" aria-label="Abrir menú" onClick={() => setOpen(true)}><Menu size={20} /></button><div><span>{superAdmin ? "NanoLabs" : currentItem?.label ?? "OnlyTurn"}</span><strong>{tenantName}</strong></div></div><div className="topbar-actions">{currentItem && <button className="module-help-trigger" type="button" onClick={() => setHelpOpen(true)} aria-label={`Ayuda de ${currentItem.label}`}><CircleHelp size={17} /><span>Ayuda</span></button>}<span className="system-status"><i /> Operativo</span></div></header>
+      <header className="topbar"><div className="topbar-title"><button className="mobile-menu" aria-label="Abrir menú" onClick={() => setOpen(true)}><Menu size={20} /></button><div><span>{superAdmin ? "NanoLabs" : currentItem?.label ?? "OnlyTurn"}</span><strong>{tenantName}</strong></div></div><div className="topbar-actions">{!superAdmin && pendingRegistrations > 0 && <Link className="pending-registration-alert" href="/clientes"><BellRing size={16}/><span><strong>{pendingRegistrations}</strong> registro{pendingRegistrations === 1 ? "" : "s"} nuevo{pendingRegistrations === 1 ? "" : "s"}</span></Link>}{currentItem && <button className="module-help-trigger" type="button" onClick={() => setHelpOpen(true)} aria-label={`Ayuda de ${currentItem.label}`}><CircleHelp size={17} /><span>Ayuda</span></button>}<span className="system-status"><i /> Operativo</span></div></header>
       <div className="content">{children}</div>
     </main>
 
