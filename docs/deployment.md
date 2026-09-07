@@ -14,22 +14,24 @@ Topología:
 Internet
   ↓
 Nginx Proxy Manager
-  ↓ red Docker proxy
-onlyturn-web:3000
-  ↓ red onlyturn-internal
-onlyturn-db:5432
+  ├─ onlyturn.nanoapps.ar -> onlyturn-web:3000
+  └─ *.nanoapps.ar -> nanoapps-router:8080
+                        ↓ consulta ownership
+                  onlyturn-web:3000
+                        ↓ red onlyturn-internal
+                  onlyturn-db:5432
 ```
 
 PostgreSQL nunca publica un puerto al host.
 
 ## Dominios
 
-- plataforma: `onlyturn.nanoapps.ar`
-- tenants: `*.onlyturn.nanoapps.ar`
+- plataforma / SuperAdmin: `onlyturn.nanoapps.ar`
+- tenants: `<slug>.nanoapps.ar`
 
-OnlyTurn no debe recibir el wildcard genérico `*.nanoapps.ar`, porque ese namespace se comparte con otros productos NanoLabs.
+El wildcard `*.nanoapps.ar` pertenece al `nanoapps-router` central, no directamente a OnlyTurn. El router conserva `Host` / `X-Forwarded-Host`, consulta `/api/internal/caddy/ask?domain=<hostname>` y envía la petición al SaaS que declara ownership del slug.
 
-Nginx Proxy Manager debe conservar `Host` / `X-Forwarded-Host` y dirigir plataforma + wildcard de OnlyTurn al contenedor `onlyturn-web` por la red `proxy`.
+OnlyTurn debe devolver `204` únicamente para tenants activos o en trial que existan en su propia base, y `404` para hostnames que no le pertenecen.
 
 ## Deploy
 
@@ -71,10 +73,11 @@ Como mínimo:
 
 - contenedores healthy;
 - `/api/health` en estado `ok`;
-- login SuperAdmin;
+- login SuperAdmin por `onlyturn.nanoapps.ar`;
 - login tenant cuando exista uno;
 - alta de tenant desde SuperAdmin;
-- reserva pública por `<slug>.onlyturn.nanoapps.ar`;
-- confirmación de que `<slug>.nanoapps.ar` no es capturado por OnlyTurn.
+- `/api/internal/caddy/ask?domain=<slug>.nanoapps.ar` responde `204` para un tenant OnlyTurn real;
+- el mismo endpoint responde `404` para un slug que no pertenece a OnlyTurn;
+- reserva pública por `<slug>.nanoapps.ar` a través de `nanoapps-router`.
 
 Cuando existan clientes reales, incorporar el backup de PostgreSQL a la política central de backups de NanoLabs antes de cada cambio de schema con riesgo.
