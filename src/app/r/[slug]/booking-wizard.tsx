@@ -16,9 +16,15 @@ type Service = {
   name: string;
   description: string | null;
   category: string | null;
+  bookingType: "APPOINTMENT" | "CLASS" | "EVENT" | "RESOURCE";
+  assignmentStrategy: "CLIENT_CHOOSES" | "ANY_AVAILABLE" | "ROUND_ROBIN" | "MANUAL";
   durationMinutes: number;
   preparationMinutes: number;
   bufferMinutes: number;
+  minPartySize: number;
+  maxPartySize: number;
+  allowWaitlist: boolean;
+  allowRecurring: boolean;
   priceCents: number | null;
   color: string;
   professionalMode: string;
@@ -28,6 +34,24 @@ type Service = {
   professionals: { professional: { id: string; name: string } }[];
   resources: { resource: { id: string; name: string; type: string | null } }[];
   customFields: CustomField[];
+};
+type SessionOption = {
+  id: string;
+  title: string | null;
+  startsAt: string;
+  endsAt: string;
+  capacity: number;
+  occupied: number;
+  available: number;
+  professional: { id: string; name: string } | null;
+  resource: { id: string; name: string; type: string | null } | null;
+};
+
+const bookingTypeLabel: Record<Service["bookingType"], string> = {
+  APPOINTMENT: "Turno",
+  CLASS: "Clase",
+  EVENT: "Evento",
+  RESOURCE: "Reserva",
 };
 
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
@@ -62,7 +86,10 @@ export function BookingWizard({
   const [weekStart, setWeekStart] = useState(() => isoDate(new Date()));
   const [slot, setSlot] = useState("");
   const [slots, setSlots] = useState<string[]>([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [sessionId, setSessionId] = useState("");
+  const [sessions, setSessions] = useState<SessionOption[]>([]);
+  const [partySize, setPartySize] = useState(1);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
@@ -76,29 +103,31 @@ export function BookingWizard({
     [locationId, services],
   );
   const service = useMemo(() => locationServices.find((item) => item.id === serviceId), [locationServices, serviceId]);
-  const categories = useMemo(
-    () => [...new Set(locationServices.map((item) => item.category || "General"))],
-    [locationServices],
-  );
+  const isSessionType = service?.bookingType === "CLASS" || service?.bookingType === "EVENT";
+  const selectedSession = useMemo(() => sessions.find((item) => item.id === sessionId), [sessions, sessionId]);
+  const categories = useMemo(() => [...new Set(locationServices.map((item) => item.category || "General"))], [locationServices]);
   const paymentPolicy = (service?.depositPolicy ?? {}) as { enabled?: boolean; mode?: "DEPOSIT" | "FULL"; percent?: number };
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addUtcDays(weekStart, index)), [weekStart]);
   const money = new Intl.NumberFormat("es-AR", { style: "currency", currency, maximumFractionDigits: 0 });
   const assignmentReady = Boolean(
     service &&
     locationId &&
+    !isSessionType &&
     (service.professionalMode !== "REQUIRED" || professionalId) &&
     (service.resourceMode !== "REQUIRED" || resourceId),
   );
+  const selectionReady = isSessionType ? Boolean(selectedSession) : Boolean(slot);
+  const partyMax = isSessionType ? Math.min(service?.maxPartySize ?? 1, selectedSession?.available ?? 1) : service?.maxPartySize ?? 1;
 
   useEffect(() => {
     const controller = new AbortController();
-    async function load() {
+    async function loadTimedSlots() {
       await Promise.resolve();
-      if (!assignmentReady) {
+      if (!assignmentReady || isSessionType) {
         setSlots([]);
         return;
       }
-      setLoadingSlots(true);
+      setLoadingAvailability(true);
       setError("");
       setSlot("");
       const qs = new URLSearchParams({
@@ -109,25 +138,53 @@ export function BookingWizard({
         ...(resourceId ? { resourceId } : {}),
       });
       try {
-        const res = await fetch(`/api/public/${slug}/availability?${qs}`, { signal: controller.signal });
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error ?? "No pudimos consultar horarios");
+        const response = await fetch(`/api/public/${slug}/availability?${qs}`, { signal: controller.signal });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "No pudimos consultar horarios");
         setSlots(body.slots);
       } catch (err) {
         if (err instanceof Error && err.name !== "AbortError") setError(err.message);
       } finally {
-        setLoadingSlots(false);
+        setLoadingAvailability(false);
       }
     }
-    void load();
+    void loadTimedSlots();
     return () => controller.abort();
-  }, [assignmentReady, date, locationId, professionalId, resourceId, serviceId, slug]);
+  }, [assignmentReady, date, isSessionType, locationId, professionalId, resourceId, serviceId, slug]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadSessions() {
+      await Promise.resolve();
+      if (!service || !isSessionType || !locationId) {
+        setSessions([]);
+        return;
+      }
+      setLoadingAvailability(true);
+      setError("");
+      setSessionId("");
+      try {
+        const qs = new URLSearchParams({ locationId, serviceId: service.id });
+        const response = await fetch(`/api/public/${slug}/sessions?${qs}`, { signal: controller.signal });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "No pudimos consultar sesiones");
+        setSessions(body.sessions);
+      } catch (err) {
+        if (err instanceof Error && err.name !== "AbortError") setError(err.message);
+      } finally {
+        setLoadingAvailability(false);
+      }
+    }
+    void loadSessions();
+    return () => controller.abort();
+  }, [isSessionType, locationId, service, serviceId, slug]);
 
   const glideTo = (target: React.RefObject<HTMLElement | null>) => setTimeout(() => target.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
 
   function chooseLocation(id: string) {
     setLocation(id);
     setSlot("");
+    setSessionId("");
     setProfessional("");
     setResource("");
     if (!services.find((item) => item.id === serviceId)?.locations.some((link) => link.locationId === id)) setServiceId("");
@@ -136,15 +193,25 @@ export function BookingWizard({
 
   function chooseService(id: string) {
     const next = locationServices.find((item) => item.id === id);
+    const sessionBased = next?.bookingType === "CLASS" || next?.bookingType === "EVENT";
     setServiceId(id);
-    setProfessional(next?.professionalMode === "REQUIRED" ? next.professionals[0]?.professional.id ?? "" : "");
-    setResource(next?.resourceMode === "REQUIRED" ? next.resources[0]?.resource.id ?? "" : "");
+    setProfessional(!sessionBased && next?.professionalMode === "REQUIRED" ? next.professionals[0]?.professional.id ?? "" : "");
+    setResource(!sessionBased && next?.resourceMode === "REQUIRED" ? next.resources[0]?.resource.id ?? "" : "");
+    setPartySize(next?.minPartySize ?? 1);
     setSlot("");
+    setSessionId("");
     glideTo(timeRef);
   }
 
   function chooseSlot(value: string) {
     setSlot(value);
+    glideTo(detailsRef);
+  }
+
+  function chooseSession(value: string) {
+    const next = sessions.find((item) => item.id === value);
+    setSessionId(value);
+    if (next && service) setPartySize(Math.min(Math.max(service.minPartySize, 1), next.available));
     glideTo(detailsRef);
   }
 
@@ -166,9 +233,11 @@ export function BookingWizard({
           tenantSlug: slug,
           locationId,
           serviceId,
-          professionalId: professionalId || undefined,
-          resourceId: resourceId || undefined,
-          startsAt: slot,
+          professionalId: !isSessionType && professionalId ? professionalId : undefined,
+          resourceId: !isSessionType && resourceId ? resourceId : undefined,
+          sessionId: isSessionType ? sessionId : undefined,
+          startsAt: !isSessionType ? slot : undefined,
+          partySize,
           firstName: formData.get("firstName"),
           lastName: formData.get("lastName"),
           phone: formData.get("phone"),
@@ -192,10 +261,13 @@ export function BookingWizard({
         <div className="success-icon">✓</div>
         <span className="eyebrow">Reserva confirmada</span>
         <h2>¡Listo! Tu reserva quedó agendada.</h2>
-        <p className="muted">Ya podés cerrar esta pantalla. El negocio recibió tus datos.</p>
+        <p className="muted">Podés administrarla desde tu cuenta o comunicarte con el negocio si necesitás un cambio.</p>
       </div>
     );
   }
+
+  const selectedDate = isSessionType ? selectedSession?.startsAt : slot;
+  const paymentTotal = service?.priceCents ? (service.priceCents / 100) * partySize * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100) : 0;
 
   return (
     <div className="booking-flow">
@@ -204,7 +276,7 @@ export function BookingWizard({
       <section className="booking-selection card">
         <div className="booking-section-title">
           <span className="selection-number">1</span>
-          <div><h2>Elegí qué querés reservar</h2><p className="muted">Primero la sede y después el servicio disponible allí.</p></div>
+          <div><h2>Elegí qué querés reservar</h2><p className="muted">Seleccioná la sede y luego la opción que necesitás.</p></div>
         </div>
 
         <div className="choice-chips">
@@ -216,20 +288,16 @@ export function BookingWizard({
         </div>
 
         <div className={`service-cards ${locationId ? "" : "locked-choice"}`} ref={serviceRef}>
-          {locationId && !locationServices.length && <div className="empty" style={{ gridColumn: "1/-1" }}>Esta sede todavía no tiene servicios disponibles online.</div>}
+          {locationId && !locationServices.length && <div className="empty" style={{ gridColumn: "1/-1" }}>Esta sede todavía no tiene opciones disponibles online.</div>}
           {categories.flatMap((category) => locationServices.filter((item) => (item.category || "General") === category).map((item) => {
             const policy = (item.depositPolicy ?? {}) as { enabled?: boolean; mode?: string; percent?: number };
             return (
               <button type="button" className={serviceId === item.id ? "active" : ""} onClick={() => chooseService(item.id)} key={item.id}>
                 <span className="service-color" style={{ background: item.color }} />
                 <span>
-                  <small style={{ textTransform: "uppercase", letterSpacing: ".05em" }}>{category}</small>
+                  <small style={{ textTransform: "uppercase", letterSpacing: ".05em" }}>{category} · {bookingTypeLabel[item.bookingType]}</small>
                   <strong>{item.name}</strong>
-                  <small>
-                    {item.durationMinutes} min
-                    {item.preparationMinutes ? ` · preparación ${item.preparationMinutes} min` : ""}
-                    {item.bufferMinutes ? ` · buffer ${item.bufferMinutes} min` : ""}
-                  </small>
+                  <small>{item.durationMinutes} min{item.maxPartySize > 1 ? ` · hasta ${item.maxPartySize} personas` : ""}</small>
                   {item.description && <small>{item.description}</small>}
                   {policy.enabled && <em>{policy.mode === "FULL" ? "Pago online" : `Seña online ${policy.percent ?? 30}%`}</em>}
                 </span>
@@ -239,13 +307,13 @@ export function BookingWizard({
           }))}
         </div>
 
-        {service && (
+        {service && !isSessionType && (
           <div className="assignment-row">
             {service.professionalMode !== "NONE" && service.professionals.length > 0 && (
               <div className="field">
                 <label>{service.professionalMode === "REQUIRED" ? "Profesional *" : "Profesional (opcional)"}</label>
                 <select className="select" value={professionalId} onChange={(event) => setProfessional(event.target.value)}>
-                  {service.professionalMode !== "REQUIRED" && <option value="">Sin profesional asignado</option>}
+                  {service.professionalMode !== "REQUIRED" && <option value="">Sin preferencia</option>}
                   {service.professionals.map((item) => <option value={item.professional.id} key={item.professional.id}>{item.professional.name}</option>)}
                 </select>
               </div>
@@ -254,7 +322,7 @@ export function BookingWizard({
               <div className="field">
                 <label>{service.resourceMode === "REQUIRED" ? "Recurso *" : "Recurso (opcional)"}</label>
                 <select className="select" value={resourceId} onChange={(event) => setResource(event.target.value)}>
-                  {service.resourceMode !== "REQUIRED" && <option value="">Sin recurso asignado</option>}
+                  {service.resourceMode !== "REQUIRED" && <option value="">Sin preferencia</option>}
                   {service.resources.map((item) => <option value={item.resource.id} key={item.resource.id}>{item.resource.name}{item.resource.type ? ` · ${item.resource.type}` : ""}</option>)}
                 </select>
               </div>
@@ -264,54 +332,96 @@ export function BookingWizard({
       </section>
 
       <section className={`booking-time card guided-section ${service ? "ready" : "locked"}`} ref={timeRef}>
-        <div className="booking-section-title"><span className="selection-number">2</span><div><h2>Fecha y hora</h2><p className="muted">Sólo mostramos horarios que cumplen las reglas de disponibilidad.</p></div></div>
-        <div className="date-navigation">
-          <button type="button" disabled={!service} onClick={() => setWeekStart(addUtcDays(weekStart, -7))} aria-label="Semana anterior">‹</button>
-          <div className="date-strip">
-            {days.map((item) => {
-              const value = new Date(`${item}T12:00:00Z`);
-              return (
-                <button type="button" disabled={!service} className={date === item ? "active" : ""} onClick={() => setDate(item)} key={item}>
-                  <small>{new Intl.DateTimeFormat("es-AR", { weekday: "short", timeZone: "UTC" }).format(value)}</small>
-                  <strong>{value.getUTCDate()}</strong>
-                  <span>{new Intl.DateTimeFormat("es-AR", { month: "short", timeZone: "UTC" }).format(value)}</span>
-                </button>
-              );
-            })}
-          </div>
-          <button type="button" disabled={!service} onClick={() => setWeekStart(addUtcDays(weekStart, 7))} aria-label="Semana siguiente">›</button>
+        <div className="booking-section-title">
+          <span className="selection-number">2</span>
+          <div><h2>{isSessionType ? "Elegí una sesión" : "Fecha y hora"}</h2><p className="muted">{isSessionType ? "Mostramos las próximas fechas con cupo disponible." : "Sólo mostramos horarios que cumplen todas las reglas de agenda."}</p></div>
         </div>
-        <div className="more-date"><label>Ir a otra fecha</label><input type="date" className="input" value={date} min={isoDate(new Date())} onChange={(event) => { setDate(event.target.value); setWeekStart(event.target.value); }} /></div>
-        {loadingSlots
-          ? <div className="empty">Buscando horarios disponibles…</div>
-          : <div className="time-groups">{slots.map((value) => <button type="button" className={slot === value ? "active" : ""} onClick={() => chooseSlot(value)} key={value}>{new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: timezone }).format(new Date(value))}</button>)}</div>}
-        {!loadingSlots && assignmentReady && !slots.length && <div className="empty">No hay horarios libres este día. Elegí otra fecha.</div>}
-        {!assignmentReady && <div className="empty">Completá las selecciones requeridas para consultar disponibilidad.</div>}
+
+        {isSessionType ? (
+          <>
+            {loadingAvailability && <div className="empty">Buscando próximas sesiones…</div>}
+            {!loadingAvailability && sessions.length > 0 && (
+              <div className="service-cards">
+                {sessions.map((item) => {
+                  const full = item.available < (service?.minPartySize ?? 1);
+                  return (
+                    <button type="button" disabled={full} className={sessionId === item.id ? "active" : ""} onClick={() => chooseSession(item.id)} key={item.id}>
+                      <span>
+                        <small>{new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "2-digit", month: "short", timeZone: timezone }).format(new Date(item.startsAt))}</small>
+                        <strong>{item.title || service?.name}</strong>
+                        <small>{new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: timezone }).format(new Date(item.startsAt))} · {item.professional?.name || item.resource?.name || "Sesión programada"}</small>
+                      </span>
+                      <b>{full ? "Completo" : `${item.available} lugar${item.available === 1 ? "" : "es"}`}</b>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {!loadingAvailability && !sessions.length && <div className="empty">No hay próximas sesiones publicadas con disponibilidad.</div>}
+          </>
+        ) : (
+          <>
+            <div className="date-navigation">
+              <button type="button" disabled={!service} onClick={() => setWeekStart(addUtcDays(weekStart, -7))} aria-label="Semana anterior">‹</button>
+              <div className="date-strip">
+                {days.map((item) => {
+                  const value = new Date(`${item}T12:00:00Z`);
+                  return (
+                    <button type="button" disabled={!service} className={date === item ? "active" : ""} onClick={() => setDate(item)} key={item}>
+                      <small>{new Intl.DateTimeFormat("es-AR", { weekday: "short", timeZone: "UTC" }).format(value)}</small>
+                      <strong>{value.getUTCDate()}</strong>
+                      <span>{new Intl.DateTimeFormat("es-AR", { month: "short", timeZone: "UTC" }).format(value)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button type="button" disabled={!service} onClick={() => setWeekStart(addUtcDays(weekStart, 7))} aria-label="Semana siguiente">›</button>
+            </div>
+            <div className="more-date"><label>Ir a otra fecha</label><input type="date" className="input" value={date} min={isoDate(new Date())} onChange={(event) => { setDate(event.target.value); setWeekStart(event.target.value); }} /></div>
+            {loadingAvailability
+              ? <div className="empty">Buscando horarios disponibles…</div>
+              : <div className="time-groups">{slots.map((value) => <button type="button" className={slot === value ? "active" : ""} onClick={() => chooseSlot(value)} key={value}>{new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: timezone }).format(new Date(value))}</button>)}</div>}
+            {!loadingAvailability && assignmentReady && !slots.length && <div className="empty">No hay horarios libres este día. Elegí otra fecha.</div>}
+            {!assignmentReady && <div className="empty">Completá las selecciones requeridas para consultar disponibilidad.</div>}
+          </>
+        )}
       </section>
 
-      <section className={`booking-details card guided-section ${slot ? "ready" : "locked"}`} ref={detailsRef}>
+      <section className={`booking-details card guided-section ${selectionReady ? "ready" : "locked"}`} ref={detailsRef}>
         <div className="booking-section-title">
           <span className="selection-number">3</span>
-          <div><h2>Tus datos</h2><p className="muted">{slot ? new Intl.DateTimeFormat("es-AR", { dateStyle: "full", timeStyle: "short", timeZone: timezone }).format(new Date(slot)) : "Primero elegí un horario"}</p></div>
+          <div><h2>Tus datos</h2><p className="muted">{selectedDate ? new Intl.DateTimeFormat("es-AR", { dateStyle: "full", timeStyle: "short", timeZone: timezone }).format(new Date(selectedDate)) : "Primero elegí una fecha y horario"}</p></div>
         </div>
-        {slot && (
+
+        {selectionReady && service && (
           <form onSubmit={submit}>
+            {(service.maxPartySize > 1 || isSessionType) && (
+              <div className="field">
+                <label>Cantidad de asistentes</label>
+                <input className="input" name="partySize" type="number" min={service.minPartySize} max={Math.max(service.minPartySize, partyMax)} value={partySize} onChange={(event) => setPartySize(Number(event.target.value))} required />
+                <small className="muted">Disponible para esta reserva: hasta {Math.max(service.minPartySize, partyMax)}.</small>
+              </div>
+            )}
+
             <div className="customer-grid">
               <div className="field"><label>Nombre *</label><input className="input" name="firstName" autoComplete="given-name" defaultValue={customer?.firstName} required /></div>
               <div className="field"><label>Apellido</label><input className="input" name="lastName" autoComplete="family-name" defaultValue={customer?.lastName} /></div>
               <div className="field"><label>Teléfono *</label><input className="input" name="phone" type="tel" autoComplete="tel" defaultValue={customer?.phone} required /></div>
               <div className="field"><label>Email</label><input className="input" name="email" type="email" autoComplete="email" defaultValue={customer?.email} required={Boolean(paymentPolicy.enabled)} /></div>
             </div>
-            {service?.customFields.map((field) => <DynamicField key={field.id} field={field} />)}
+
+            {service.customFields.map((field) => <DynamicField key={field.id} field={field} />)}
             <p className="muted booking-policy">{cancellationHours > 0 ? `Solicitá cancelaciones o cambios con al menos ${cancellationHours} horas de anticipación.` : "Consultá al negocio por cancelaciones o cambios."}</p>
-            {paymentPolicy.enabled && service?.priceCents && (
+
+            {paymentPolicy.enabled && service.priceCents && (
               <div className="payment-callout">
                 <strong>{paymentPolicy.mode === "FULL" ? "Pago total" : "Seña para confirmar"}</strong>
-                <span>{money.format((service.priceCents / 100) * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100))}</span>
-                <small>Serás redirigido a Mercado Pago. El horario queda reservado mientras completás el pago.</small>
+                <span>{money.format(paymentTotal)}</span>
+                <small>{partySize > 1 ? `${partySize} asistentes · ` : ""}Serás redirigido a Mercado Pago para confirmar.</small>
               </div>
             )}
-            <button className="button confirm-booking" disabled={pending}>{pending ? "Procesando…" : paymentPolicy.enabled ? "Reservar y pagar con Mercado Pago" : `Confirmar ${service?.name ?? "reserva"}`}</button>
+
+            <button className="button confirm-booking" disabled={pending}>{pending ? "Procesando…" : paymentPolicy.enabled ? "Reservar y pagar con Mercado Pago" : `Confirmar ${service.bookingType === "CLASS" ? "clase" : service.bookingType === "EVENT" ? "evento" : "reserva"}`}</button>
           </form>
         )}
       </section>
