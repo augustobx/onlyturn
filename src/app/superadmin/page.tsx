@@ -1,15 +1,33 @@
 import Link from "next/link";
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  Building2,
+  CalendarClock,
+  DollarSign,
+  Layers3,
+  Plus,
+  ShieldCheck,
+  TrendingUp,
+} from "lucide-react";
 import { requireSuperAdmin } from "@/lib/auth";
 import { platformDb } from "@/lib/db";
 import { tenantPublicUrl } from "@/lib/hostnames";
-import { changeTenantPlanAction, createTenantAction, extendTrialAction, updateTenantStatusAction } from "@/app/actions/superadmin";
 
 const statusLabels: Record<string, string> = {
-  TRIAL: "Trial",
+  TRIAL: "Prueba",
   ACTIVE: "Activo",
   SUSPENDED: "Suspendido",
   CANCELLED: "Cancelado",
 };
+
+const money = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 0,
+});
+
+const date = new Intl.DateTimeFormat("es-AR");
 
 export default async function SuperAdminPage() {
   await requireSuperAdmin();
@@ -22,89 +40,135 @@ export default async function SuperAdminPage() {
       },
       orderBy: { createdAt: "desc" },
     }),
-    platformDb.plan.findMany({ where: { isActive: true }, orderBy: { priceCents: "asc" } }),
+    platformDb.plan.findMany({
+      orderBy: { priceCents: "asc" },
+      include: { _count: { select: { subscriptions: true } } },
+    }),
   ]);
 
-  const totalBookings = tenants.reduce((total, tenant) => total + tenant._count.bookings, 0);
   const activeCount = tenants.filter((tenant) => tenant.status === "ACTIVE").length;
   const trialCount = tenants.filter((tenant) => tenant.status === "TRIAL").length;
   const suspendedCount = tenants.filter((tenant) => tenant.status === "SUSPENDED").length;
+  const cancelledCount = tenants.filter((tenant) => tenant.status === "CANCELLED").length;
 
-  return <>
-    <div className="page-title">
-      <span className="eyebrow">NanoLabs · Control de plataforma</span>
-      <h1>OnlyTurn SuperAdmin</h1>
-      <p className="muted">Tenants, planes, trials y uso global desde una única consola.</p>
+  const mrrCents = tenants.reduce((total, tenant) => {
+    const subscription = tenant.subscriptions[0];
+    if (!subscription || !["ACTIVE", "TRIALING"].includes(subscription.status)) return total;
+    const discountMultiplier = Math.max(0, 100 - subscription.discountPercent) / 100;
+    return total + Math.round(subscription.plan.priceCents * discountMultiplier);
+  }, 0);
+
+  const now = new Date();
+  const next30Days = new Date(now.getTime() + 30 * 86_400_000);
+  const expiringSoon = tenants
+    .filter((tenant) => {
+      const end = tenant.subscriptions[0]?.currentPeriodEnd;
+      return end && end >= now && end <= next30Days;
+    })
+    .sort((a, b) => a.subscriptions[0]!.currentPeriodEnd.getTime() - b.subscriptions[0]!.currentPeriodEnd.getTime());
+
+  return (
+    <div className="sa-stack">
+      <section className="sa-hero">
+        <div>
+          <span className="sa-kicker">NanoLabs · Plano de Control</span>
+          <h1>OnlyTurn SuperAdmin <ShieldCheck size={25} /></h1>
+          <p>Supervisión global de empresas, membresías, planes y operación SaaS en producción.</p>
+        </div>
+        <Link href="/superadmin/tenants" className="sa-primary-button"><Plus size={16} /> Nueva empresa</Link>
+      </section>
+
+      <section className="sa-kpi-grid">
+        <article className="sa-kpi-card">
+          <div className="sa-kpi-head"><span>Total tenants</span><i className="sa-icon indigo"><Building2 size={20} /></i></div>
+          <strong>{tenants.length}</strong>
+          <small><b className="success">{activeCount} activos</b> · <b className="warning">{trialCount} prueba</b></small>
+        </article>
+
+        <article className="sa-kpi-card">
+          <div className="sa-kpi-head"><span>MRR proyectado</span><i className="sa-icon emerald"><DollarSign size={20} /></i></div>
+          <strong>{money.format(mrrCents / 100)}</strong>
+          <small className="success"><TrendingUp size={13} /> facturación mensual recurrente</small>
+        </article>
+
+        <article className="sa-kpi-card">
+          <div className="sa-kpi-head"><span>Planes disponibles</span><i className="sa-icon cyan"><Layers3 size={20} /></i></div>
+          <strong>{plans.filter((plan) => plan.isActive).length}</strong>
+          <small>{plans.map((plan) => plan.code).join(" · ")}</small>
+        </article>
+
+        <article className="sa-kpi-card">
+          <div className="sa-kpi-head"><span>Bloqueados</span><i className="sa-icon red"><AlertTriangle size={20} /></i></div>
+          <strong>{suspendedCount + cancelledCount}</strong>
+          <small>{suspendedCount} suspendidos · {cancelledCount} cancelados</small>
+        </article>
+      </section>
+
+      <section className="sa-dashboard-grid">
+        <article className="sa-panel sa-panel-wide">
+          <div className="sa-panel-head">
+            <div><h2>Empresas registradas</h2><p>Últimos tenants aprovisionados en OnlyTurn.</p></div>
+            <Link href="/superadmin/tenants">Ver todas ({tenants.length}) <ArrowUpRight size={14} /></Link>
+          </div>
+
+          <div className="sa-table-wrap">
+            <table className="sa-table">
+              <thead><tr><th>Empresa / dominio</th><th>Plan</th><th>Estado</th><th>Membresía</th><th></th></tr></thead>
+              <tbody>
+                {tenants.slice(0, 10).length ? tenants.slice(0, 10).map((tenant) => {
+                  const subscription = tenant.subscriptions[0];
+                  return (
+                    <tr key={tenant.id}>
+                      <td>
+                        <strong>{tenant.name}</strong>
+                        <small className="mono">{tenant.slug}.nanoapps.ar</small>
+                      </td>
+                      <td><span className="sa-plan-pill">{subscription?.plan.name ?? "Sin plan"}</span></td>
+                      <td><span className={`sa-status ${tenant.status.toLowerCase()}`}>{statusLabels[tenant.status] ?? tenant.status}</span></td>
+                      <td>
+                        {subscription ? <><strong>{date.format(subscription.currentPeriodEnd)}</strong><small>{subscription.status}</small></> : <span className="sa-muted">Sin membresía</span>}
+                      </td>
+                      <td className="sa-table-action"><Link href={`/superadmin/tenants/${tenant.id}`}>Configurar</Link></td>
+                    </tr>
+                  );
+                }) : <tr><td colSpan={5} className="sa-empty">No hay empresas registradas.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <aside className="sa-panel">
+          <div className="sa-panel-head"><div><h2>Planes y cobertura</h2><p>Configuración comercial vigente.</p></div></div>
+          <div className="sa-plan-summary">
+            {plans.map((plan) => (
+              <div className="sa-plan-summary-card" key={plan.id}>
+                <div><strong>{plan.name}</strong><span>{money.format(plan.priceCents / 100)}/mes</span></div>
+                <p>{plan.description ?? `Plan ${plan.code}`}</p>
+                <footer><span>{plan._count.subscriptions} suscripción(es)</span><b className={plan.isActive ? "success" : "danger"}>{plan.isActive ? "Activo" : "Inactivo"}</b></footer>
+              </div>
+            ))}
+          </div>
+          <Link href="/superadmin/planes" className="sa-panel-link">Administrar planes <ArrowUpRight size={14} /></Link>
+        </aside>
+      </section>
+
+      <section className="sa-panel">
+        <div className="sa-panel-head">
+          <div><h2>Vencimientos próximos</h2><p>Membresías que vencen durante los próximos 30 días.</p></div>
+          <CalendarClock size={20} />
+        </div>
+        {expiringSoon.length ? (
+          <div className="sa-expiry-grid">
+            {expiringSoon.slice(0, 8).map((tenant) => {
+              const subscription = tenant.subscriptions[0]!;
+              return <Link href={`/superadmin/tenants/${tenant.id}`} className="sa-expiry-card" key={tenant.id}>
+                <div><strong>{tenant.name}</strong><small>{tenantPublicUrl(tenant.slug)}</small></div>
+                <span>{date.format(subscription.currentPeriodEnd)}</span>
+              </Link>;
+            })}
+          </div>
+        ) : <div className="sa-empty">No hay membresías con vencimiento dentro de los próximos 30 días.</div>}
+      </section>
     </div>
-
-    <section className="platform-summary">
-      <div className="card platform-stat"><span className="muted">Tenants</span><strong>{tenants.length}</strong><small className="muted">total registrados</small></div>
-      <div className="card platform-stat"><span className="muted">Activos</span><strong>{activeCount}</strong><small className="muted">en producción</small></div>
-      <div className="card platform-stat"><span className="muted">Trials</span><strong>{trialCount}</strong><small className="muted">en evaluación</small></div>
-      <div className="card platform-stat"><span className="muted">Suspendidos</span><strong>{suspendedCount}</strong><small className="muted">sin acceso operativo</small></div>
-      <div className="card platform-stat"><span className="muted">Reservas</span><strong>{totalBookings}</strong><small className="muted">acumuladas</small></div>
-    </section>
-
-    <details className="card" style={{marginTop:18}}>
-      <summary style={{cursor:"pointer",fontWeight:750}}>Alta de nuevo cliente</summary>
-      <p className="muted" style={{fontSize:13}}>Crea el tenant, owner y trial inicial en una sola transacción.</p>
-      <form action={createTenantAction} className="grid" style={{gridTemplateColumns:"repeat(3,minmax(0,1fr))",marginTop:16}}>
-        <input className="input" name="name" placeholder="Nombre del negocio" required />
-        <input className="input" name="slug" placeholder="slug-del-negocio" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required />
-        <select className="select" name="planId" required>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name}</option>)}</select>
-        <input className="input" name="ownerName" placeholder="Nombre del responsable" required />
-        <input className="input" name="ownerEmail" type="email" placeholder="responsable@negocio.com" required />
-        <input className="input" name="password" type="password" minLength={10} placeholder="Contraseña temporal" required />
-        <button className="button" style={{gridColumn:"1/-1"}}>Crear tenant con trial de 14 días</button>
-      </form>
-    </details>
-
-    <div className="platform-toolbar"><h2>Clientes de OnlyTurn</h2><span className="muted" style={{fontSize:12}}>{tenants.length ? "Administración productiva" : "Todavía no hay clientes cargados"}</span></div>
-
-    <div className="card table-wrap">
-      <table className="table">
-        <thead><tr><th>Negocio</th><th>Estado</th><th>Plan</th><th>Uso</th><th>Trial</th><th>Control</th></tr></thead>
-        <tbody>
-          {tenants.length ? tenants.map((tenant) => {
-            const subscription = tenant.subscriptions[0];
-            return <tr key={tenant.id}>
-              <td>
-                <div className="tenant-cell">
-                  <strong>{tenant.name}</strong>
-                  <small>{tenant.slug} · alta {new Intl.DateTimeFormat("es-AR").format(tenant.createdAt)}</small>
-                  <Link href={tenantPublicUrl(tenant.slug)} target="_blank" rel="noreferrer" style={{fontSize:11,color:"#2563eb"}}>Abrir sitio público ↗</Link>
-                </div>
-              </td>
-              <td><span className={`status ${tenant.status}`}>{statusLabels[tenant.status] ?? tenant.status}</span></td>
-              <td>
-                <form action={changeTenantPlanAction} style={{display:"flex",gap:6,minWidth:210}}>
-                  <input type="hidden" name="tenantId" value={tenant.id} />
-                  <select className="select" name="planId" defaultValue={subscription?.planId} disabled={!subscription}>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name}</option>)}</select>
-                  <button className="button secondary" disabled={!subscription}>Aplicar</button>
-                </form>
-              </td>
-              <td><strong>{tenant._count.bookings}</strong> turnos<div className="muted" style={{fontSize:11}}>{tenant._count.memberships} usuarios · {tenant._count.customers} clientes · {tenant._count.locations} sedes</div></td>
-              <td>
-                <form action={extendTrialAction} style={{display:"flex",gap:6}}>
-                  <input type="hidden" name="tenantId" value={tenant.id} />
-                  <input className="input" name="days" type="number" min="1" max="365" defaultValue="7" style={{width:68}} />
-                  <button className="button secondary">Extender</button>
-                </form>
-                <div className="muted" style={{fontSize:10,marginTop:5}}>{tenant.trialEndsAt ? `vence ${new Intl.DateTimeFormat("es-AR").format(tenant.trialEndsAt)}` : "sin trial vigente"}</div>
-              </td>
-              <td>
-                <form action={updateTenantStatusAction} style={{display:"flex",gap:6,minWidth:200}}>
-                  <input type="hidden" name="tenantId" value={tenant.id} />
-                  <select className="select" name="status" defaultValue={tenant.status}>
-                    <option value="TRIAL">Trial</option><option value="ACTIVE">Activo</option><option value="SUSPENDED">Suspendido</option><option value="CANCELLED">Cancelado</option>
-                  </select>
-                  <button className="button secondary">Guardar</button>
-                </form>
-              </td>
-            </tr>;
-          }) : <tr><td colSpan={6}><div className="empty">OnlyTurn está listo para crear el primer tenant productivo.</div></td></tr>}
-        </tbody>
-      </table>
-    </div>
-  </>;
+  );
 }
