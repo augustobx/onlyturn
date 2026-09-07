@@ -1,66 +1,117 @@
-# OnlyTurn
+# OnlyTurn · NanoLabs
 
-Motor SaaS universal para turnos, citas, reservas, profesionales y recursos. El repositorio contiene un MVP vertical multi-tenant con panel operativo, reserva pública, SuperAdmin, planes, seed completo y protección de concurrencia en PostgreSQL.
+OnlyTurn es la plataforma SaaS multi-tenant de NanoLabs para gestionar turnos, citas, reservas, profesionales, recursos y clientes desde una única aplicación.
 
-## Inicio rápido
+El proyecto está preparado para producción con Next.js 16, React 19, TypeScript, Prisma, PostgreSQL, Docker, Cloudflare R2 y Mercado Pago.
 
-1. Copiar `.env.example` a `.env` y cambiar `SESSION_SECRET` y `POSTGRES_PASSWORD`.
-2. Ejecutar `docker compose up -d --build`.
-3. Esperar a que `docker compose ps` muestre `app` y `db` saludables.
-4. Abrir [http://localhost:3000](http://localhost:3000).
+## Arquitectura
 
-El contenedor `migrate` aplica migraciones versionadas y ejecuta un seed idempotente antes de iniciar la aplicación. La base no se publica fuera de la red interna de Compose.
+- **Plataforma NanoLabs:** `/superadmin`
+- **Panel del tenant:** `/app`
+- **Reserva pública:** `/r/[slug]`
+- **Dominio de plataforma:** `onlyturn.nanoapps.ar`
+- **Dominio de tenant:** `<slug>.onlyturn.nanoapps.ar`
+- **Base:** PostgreSQL compartido con aislamiento obligatorio por `tenantId`
+- **Proxy:** red externa Docker `proxy`
+- **Base de datos:** accesible únicamente por la red interna `onlyturn-internal`
 
-## Credenciales demo
+OnlyTurn no debe resolver hosts genéricos `<slug>.nanoapps.ar`; cada tenant queda aislado dentro del namespace del producto.
 
-| Acceso | Usuario | Contraseña |
-|---|---|---|
-| Tenant Centro Demo | `admin@onlyturn.demo` | `Demo1234!` |
-| SuperAdmin Nano Labs | `superadmin@nanolabs.demo` | `Demo1234!` |
-| Segundo tenant para aislamiento | `otro@onlyturn.demo` | `Demo1234!` |
-| Cliente registrado Centro Demo | `mateo@demo.test` | `Demo1234!` |
+## Producción con Docker
 
-Reserva pública: [http://localhost:3000/r/centro-demo](http://localhost:3000/r/centro-demo).
+1. Copiar `.env.example` a `.env` y completar los secretos reales.
+2. Configurar `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` con una clave estable de producción.
+3. Configurar las credenciales iniciales del SuperAdmin NanoLabs si todavía no existe.
+4. Ejecutar:
 
-## Alcance implementado
+```bash
+docker compose up -d --build
+```
 
-- onboarding guiado para crear la primera sede, servicio, profesional o recurso y sus horarios;
-- agenda con alta manual, reprogramación, estados, cancelación e historial auditado;
-- catálogo operativo de sedes, servicios, profesionales y recursos;
-- reserva pública con disponibilidad dinámica, campos personalizados y prevención de dobles reservas;
-- configuración de marca, anticipación, ventana futura y bloqueos por negocio, sede, profesional o recurso;
-- biblioteca de imágenes en Cloudflare R2, logo, portada/splash, galería y tablón de anuncios;
-- PWA pública instalable con selección continua de fecha y hora;
-- calendario administrativo diario, semanal y mensual con reprogramación mediante arrastre;
-- señas o pago total por servicio mediante Mercado Pago Checkout Pro, con Secret Key/Access Token y Public Key cifradas, retorno y conciliación autoritativa;
-- registro de clientes configurable, aprobación administrativa opcional, portal de perfil, historial y cuenta corriente;
-- clientes aislados por tenant, roles y permisos, planes, límites y SuperAdmin.
+El flujo de arranque es:
 
-Para habilitar las cargas se deben configurar `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` y `R2_PUBLIC_URL`. Los envíos reales de email/WhatsApp, pagos, lista de espera, recurrencia y portal de clientes quedan como extensiones posteriores al MVP.
+```text
+PostgreSQL healthy
+    ↓
+migrate
+    ├─ prisma migrate deploy
+    └─ bootstrap de planes + SuperAdmin
+    ↓
+OnlyTurn app
+```
+
+El bootstrap es idempotente y **no crea tenants, clientes ni turnos demo**.
+
+## Variables principales
+
+Obligatorias en producción:
+
+- `POSTGRES_PASSWORD`
+- `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`
+
+Configuración de plataforma:
+
+- `PLATFORM_HOST`
+- `TENANT_BASE_DOMAIN`
+- `APP_BASE_URL`
+- `ONLYTURN_SUPERADMIN_EMAIL`
+- `ONLYTURN_SUPERADMIN_PASSWORD`
+- `ONLYTURN_SUPERADMIN_NAME`
+
+Integraciones opcionales:
+
+- `PAYMENT_ENCRYPTION_KEY` para Mercado Pago
+- `R2_ENDPOINT`
+- `R2_BUCKET`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_PUBLIC_URL`
+
+## Funcionalidad productiva
+
+- onboarding del negocio;
+- agenda diaria, semanal y mensual;
+- alta manual y reserva pública;
+- reprogramación y estados de turno;
+- sucursales, servicios, profesionales y recursos;
+- reglas y excepciones de disponibilidad;
+- prevención de dobles reservas;
+- clientes y portal de cliente;
+- cuenta corriente;
+- branding por tenant;
+- galería y anuncios;
+- PWA pública;
+- Mercado Pago para señas o pago total cuando el plan lo habilita;
+- roles, permisos, auditoría, planes, límites y SuperAdmin.
+
+Las capacidades no implementadas end-to-end permanecen deshabilitadas en los feature flags hasta estar realmente listas para producción.
 
 ## Desarrollo
 
 Con PostgreSQL disponible y `DATABASE_URL` configurada:
 
 ```bash
-npm install
+npm ci
 npm run db:generate
 npm run db:migrate
-npm run db:seed
 npm run dev
 ```
 
-Validación: `npm run lint`, `npm run typecheck`, `npm test` y `npm run build`.
+`npm run db:seed` sincroniza únicamente planes de plataforma. No crea datos demo.
+
+## Validación
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
 
 ## Documentación
 
-- [Arquitectura](docs/architecture.md)
-- [Base de datos](docs/database.md)
-- [Multi-tenancy](docs/multitenancy.md)
-- [Motor de reservas](docs/booking-engine.md)
-- [Planes y suscripciones](docs/subscriptions.md)
-- [Despliegue](docs/deployment.md)
-- [Backups](docs/backups.md)
-- [Seguridad](docs/security.md)
-- [Pagos y Mercado Pago](docs/payments.md)
-- [Revisión funcional de plataformas](docs/product-review.md)
+La documentación técnica se encuentra en `docs/` e incluye arquitectura, multi-tenancy, base de datos, reservas, seguridad, pagos, despliegue y backups.
+
+---
+
+**OnlyTurn** es un producto de **NanoLabs**.
