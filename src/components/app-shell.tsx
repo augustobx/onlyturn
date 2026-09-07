@@ -45,6 +45,7 @@ const tenantItems = {
   automatizaciones: item("/automatizaciones", "/app/automatizaciones", "Automatizaciones", BellRing, "Mensajes automáticos por eventos de agenda.", ["Elegí el disparador.", "Configurá canal y mensaje.", "Activá la regla."]),
   calendario: item("/calendario", "/app/calendario", "Calendarios", CalendarSync, "Feeds privados para Google, Outlook o Apple Calendar.", ["Copiá el feed.", "Suscribilo en el calendario externo.", "Mantené privado el enlace."]),
   reportes: item("/reportes", "/app/reportes", "Reportes", BarChart3, "Métricas de reservas, clientes, ocupación e ingresos.", ["Elegí período.", "Compará indicadores.", "Usá tendencias para tomar decisiones."]),
+  estructura: item("/estructura", "/app/estructura", "Sedes y equipo", Users, "Centraliza ubicaciones, profesionales y recursos del negocio.", ["Creá las sedes necesarias.", "Agregá profesionales si el rubro los usa.", "Cargá recursos reservables como salas, canchas o equipos."], "Después vinculá estos elementos a cada servicio desde el paso Servicios."),
   servicios: item("/servicios", "/app/catalogo", "Servicios", BriefcaseBusiness, "Catálogo y asignaciones del motor de reservas.", ["Definí qué se reserva.", "Asigná sede, profesional o recurso.", "Publicá el servicio."]),
   disponibilidad: item("/disponibilidad", "/app/disponibilidad", "Horarios", CalendarDays, "Disponibilidad semanal por negocio, sede, profesional o recurso.", ["Definí jornada general.", "Agregá reglas específicas.", "Revisá intersecciones."]),
   politicas: item("/politicas", "/app/politicas", "Reglas", ShieldCheck, "Políticas específicas por servicio.", ["Elegí servicio.", "Definí anticipación y cancelación.", "Guardá la política."]),
@@ -54,7 +55,7 @@ const tenantItems = {
 
 const primaryTenantLinks = [tenantItems.dashboard, tenantItems.agenda, tenantItems.clientes, tenantItems.setup];
 const advancedTenantLinks = [tenantItems.sesiones, tenantItems.recurrencias, tenantItems.waitlist, tenantItems.extras, tenantItems.paquetes, tenantItems.automatizaciones, tenantItems.calendario, tenantItems.reportes];
-const hiddenSetupItems = [tenantItems.servicios, tenantItems.disponibilidad, tenantItems.politicas, tenantItems.apariencia, tenantItems.configuracion];
+const hiddenSetupItems = [tenantItems.estructura, tenantItems.servicios, tenantItems.disponibilidad, tenantItems.politicas, tenantItems.apariencia, tenantItems.configuracion];
 
 const platformLinks: NavItem[] = [
   item("/superadmin", "/superadmin", "Resumen", ShieldCheck, "Vista global de OnlyTurn para NanoLabs.", ["Revisá tenants.", "Controlá membresías.", "Entrá al detalle necesario."]),
