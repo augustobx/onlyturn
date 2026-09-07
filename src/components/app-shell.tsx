@@ -12,6 +12,7 @@ import {
   Menu,
   Settings,
   ShieldCheck,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -27,6 +28,7 @@ const tenantLinks = [
   { href: "/lista-espera", internal: "/app/lista-espera", label: "Lista de espera", icon: ListChecks },
   { href: "/clientes", internal: "/app/clientes", label: "Clientes", icon: Users },
   { href: "/servicios", internal: "/app/catalogo", label: "Servicios y equipo", icon: BriefcaseBusiness },
+  { href: "/extras", internal: "/app/extras", label: "Extras", icon: Sparkles },
   { href: "/disponibilidad", internal: "/app/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
   { href: "/configuracion", internal: "/app/configuracion", label: "Configuración", icon: Settings },
 ];
