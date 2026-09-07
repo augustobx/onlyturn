@@ -20,6 +20,13 @@ type Addon = {
   durationMinutes: number;
   preparationMinutes: number;
 };
+type CustomerPackage = {
+  id: string;
+  name: string;
+  remainingUses: number;
+  expiresAt: string | null;
+  serviceIds: string[];
+};
 type Service = {
   id: string;
   name: string;
@@ -78,6 +85,7 @@ export function BookingWizard({
   cancellationHours,
   locations,
   services,
+  packages,
   customer,
 }: {
   slug: string;
@@ -86,6 +94,7 @@ export function BookingWizard({
   cancellationHours: number;
   locations: Location[];
   services: Service[];
+  packages: CustomerPackage[];
   customer?: { firstName: string; lastName: string; phone: string; email: string };
 }) {
   const [locationId, setLocation] = useState("");
@@ -93,6 +102,7 @@ export function BookingWizard({
   const [professionalId, setProfessional] = useState("");
   const [resourceId, setResource] = useState("");
   const [addonIds, setAddonIds] = useState<string[]>([]);
+  const [customerPackageId, setCustomerPackageId] = useState("");
   const [date, setDate] = useState(() => isoDate(new Date(Date.now() + 86_400_000)));
   const [weekStart, setWeekStart] = useState(() => isoDate(new Date()));
   const [slot, setSlot] = useState("");
@@ -120,6 +130,11 @@ export function BookingWizard({
   const addonKey = useMemo(() => [...addonIds].sort().join(","), [addonIds]);
   const addonPriceCents = selectedAddons.reduce((sum, addon) => sum + addon.priceCents, 0);
   const addonDuration = selectedAddons.reduce((sum, addon) => sum + addon.durationMinutes, 0);
+  const eligiblePackages = useMemo(
+    () => service ? packages.filter((membership) => membership.serviceIds.includes(service.id) && membership.remainingUses >= partySize) : [],
+    [packages, partySize, service],
+  );
+  const selectedPackage = eligiblePackages.find((membership) => membership.id === customerPackageId);
   const categories = useMemo(() => [...new Set(locationServices.map((item) => item.category || "General"))], [locationServices]);
   const paymentPolicy = (service?.depositPolicy ?? {}) as { enabled?: boolean; mode?: "DEPOSIT" | "FULL"; percent?: number };
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addUtcDays(weekStart, index)), [weekStart]);
@@ -205,6 +220,7 @@ export function BookingWizard({
     setProfessional("");
     setResource("");
     setAddonIds([]);
+    setCustomerPackageId("");
     if (!services.find((item) => item.id === serviceId)?.locations.some((link) => link.locationId === id)) setServiceId("");
     glideTo(serviceRef);
   }
@@ -216,6 +232,7 @@ export function BookingWizard({
     setProfessional(!sessionBased && next?.professionalMode === "REQUIRED" ? next.professionals[0]?.professional.id ?? "" : "");
     setResource(!sessionBased && next?.resourceMode === "REQUIRED" ? next.resources[0]?.resource.id ?? "" : "");
     setAddonIds([]);
+    setCustomerPackageId("");
     setPartySize(next?.minPartySize ?? 1);
     setSlot("");
     setSessionId("");
@@ -227,6 +244,12 @@ export function BookingWizard({
     setSlot("");
   }
 
+  function updatePartySize(value: number) {
+    setPartySize(value);
+    const current = packages.find((membership) => membership.id === customerPackageId);
+    if (current && current.remainingUses < value) setCustomerPackageId("");
+  }
+
   function chooseSlot(value: string) {
     setSlot(value);
     glideTo(detailsRef);
@@ -235,7 +258,7 @@ export function BookingWizard({
   function chooseSession(value: string) {
     const next = sessions.find((item) => item.id === value);
     setSessionId(value);
-    if (next && service) setPartySize(Math.min(Math.max(service.minPartySize, 1), next.available));
+    if (next && service) updatePartySize(Math.min(Math.max(service.minPartySize, 1), next.available));
     glideTo(detailsRef);
   }
 
@@ -262,6 +285,7 @@ export function BookingWizard({
           sessionId: isSessionType ? sessionId : undefined,
           startsAt: !isSessionType ? slot : undefined,
           addonIds,
+          customerPackageId: selectedPackage?.id,
           partySize,
           firstName: formData.get("firstName"),
           lastName: formData.get("lastName"),
@@ -293,7 +317,8 @@ export function BookingWizard({
 
   const selectedDate = isSessionType ? selectedSession?.startsAt : slot;
   const totalPriceCents = (service?.priceCents ?? 0) * partySize + addonPriceCents;
-  const paymentTotal = (totalPriceCents / 100) * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100);
+  const payablePriceCents = selectedPackage ? addonPriceCents : totalPriceCents;
+  const paymentTotal = (payablePriceCents / 100) * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100);
 
   return (
     <div className="booking-flow">
@@ -455,8 +480,19 @@ export function BookingWizard({
             {(service.maxPartySize > 1 || isSessionType) && (
               <div className="field">
                 <label>Cantidad de asistentes</label>
-                <input className="input" name="partySize" type="number" min={service.minPartySize} max={Math.max(service.minPartySize, partyMax)} value={partySize} onChange={(event) => setPartySize(Number(event.target.value))} required />
+                <input className="input" name="partySize" type="number" min={service.minPartySize} max={Math.max(service.minPartySize, partyMax)} value={partySize} onChange={(event) => updatePartySize(Number(event.target.value))} required />
                 <small className="muted">Disponible para esta reserva: hasta {Math.max(service.minPartySize, partyMax)}.</small>
+              </div>
+            )}
+
+            {eligiblePackages.length > 0 && (
+              <div className="field">
+                <label>Paquete / membresía</label>
+                <select className="select" value={customerPackageId} onChange={(event) => setCustomerPackageId(event.target.value)}>
+                  <option value="">No usar paquete</option>
+                  {eligiblePackages.map((membership) => <option value={membership.id} key={membership.id}>{membership.name} · {membership.remainingUses} uso{membership.remainingUses === 1 ? "" : "s"}{membership.expiresAt ? ` · vence ${new Intl.DateTimeFormat("es-AR").format(new Date(membership.expiresAt))}` : ""}</option>)}
+                </select>
+                <small className="muted">La reserva consume {partySize} uso{partySize === 1 ? "" : "s"}. Los extras se cobran por separado.</small>
               </div>
             )}
 
@@ -464,7 +500,7 @@ export function BookingWizard({
               <div className="field"><label>Nombre *</label><input className="input" name="firstName" autoComplete="given-name" defaultValue={customer?.firstName} required /></div>
               <div className="field"><label>Apellido</label><input className="input" name="lastName" autoComplete="family-name" defaultValue={customer?.lastName} /></div>
               <div className="field"><label>Teléfono *</label><input className="input" name="phone" type="tel" autoComplete="tel" defaultValue={customer?.phone} required /></div>
-              <div className="field"><label>Email</label><input className="input" name="email" type="email" autoComplete="email" defaultValue={customer?.email} required={Boolean(paymentPolicy.enabled)} /></div>
+              <div className="field"><label>Email</label><input className="input" name="email" type="email" autoComplete="email" defaultValue={customer?.email} required={Boolean(paymentPolicy.enabled && payablePriceCents > 0)} /></div>
             </div>
 
             {service.customFields.map((field) => <DynamicField key={field.id} field={field} />)}
@@ -472,21 +508,22 @@ export function BookingWizard({
 
             {(service.priceCents != null || addonPriceCents > 0) && (
               <div className="payment-callout">
-                <strong>Total de la reserva</strong>
-                <span>{money.format(totalPriceCents / 100)}</span>
-                {selectedAddons.length > 0 && <small>Incluye {selectedAddons.length} extra{selectedAddons.length === 1 ? "" : "s"}.</small>}
+                <strong>{selectedPackage ? `Usando ${selectedPackage.name}` : "Total de la reserva"}</strong>
+                <span>{selectedPackage ? `${partySize} uso${partySize === 1 ? "" : "s"}` : money.format(totalPriceCents / 100)}</span>
+                {selectedPackage && <small>El servicio queda cubierto por tu membresía. {addonPriceCents > 0 ? `Extras a pagar: ${money.format(addonPriceCents / 100)}.` : "No queda importe a pagar."}</small>}
+                {!selectedPackage && selectedAddons.length > 0 && <small>Incluye {selectedAddons.length} extra{selectedAddons.length === 1 ? "" : "s"}.</small>}
               </div>
             )}
 
-            {paymentPolicy.enabled && totalPriceCents > 0 && (
+            {paymentPolicy.enabled && payablePriceCents > 0 && (
               <div className="payment-callout">
                 <strong>{paymentPolicy.mode === "FULL" ? "Pago total para confirmar" : "Seña para confirmar"}</strong>
                 <span>{money.format(paymentTotal)}</span>
-                <small>{partySize > 1 ? `${partySize} asistentes · ` : ""}Serás redirigido a Mercado Pago.</small>
+                <small>{selectedPackage ? "Sólo se cobra el importe no cubierto por tu paquete. " : ""}{partySize > 1 && !selectedPackage ? `${partySize} asistentes · ` : ""}Serás redirigido a Mercado Pago.</small>
               </div>
             )}
 
-            <button className="button confirm-booking" disabled={pending}>{pending ? "Procesando…" : paymentPolicy.enabled && totalPriceCents > 0 ? "Reservar y pagar con Mercado Pago" : `Confirmar ${service.bookingType === "CLASS" ? "clase" : service.bookingType === "EVENT" ? "evento" : "reserva"}`}</button>
+            <button className="button confirm-booking" disabled={pending}>{pending ? "Procesando…" : paymentPolicy.enabled && payablePriceCents > 0 ? "Reservar y pagar con Mercado Pago" : selectedPackage ? `Confirmar usando ${selectedPackage.name}` : `Confirmar ${service.bookingType === "CLASS" ? "clase" : service.bookingType === "EVENT" ? "evento" : "reserva"}`}</button>
           </form>
         )}
       </section>
