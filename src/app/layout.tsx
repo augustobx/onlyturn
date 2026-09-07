@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./nanolabs.css";
 import "./admin-ux.css";
+import "./pwa-themes.css";
 import { PwaRegister } from "@/components/pwa-register";
 
 const baseUrl = process.env.APP_BASE_URL || "https://onlyturn.nanoapps.ar";
