@@ -35,7 +35,11 @@ function refreshSettings(slug?: string) {
   revalidatePath("/configuracion");
   revalidatePath("/app/configurar");
   revalidatePath("/configurar");
-  if (slug) revalidatePath(`/r/${slug}`);
+  if (slug) {
+    revalidatePath(`/r/${slug}`);
+    revalidatePath(`/r/${slug}/registro`);
+    revalidatePath(`/r/${slug}/cuenta`);
+  }
 }
 
 export async function updateSettingsAction(formData: FormData) {
@@ -60,9 +64,23 @@ export async function updateSettingsAction(formData: FormData) {
 
 export async function updateCustomerAccessSettingsAction(formData: FormData) {
   const { session, membership, tenant } = await authorize();
+  const input = z.object({
+    customerAccessTitle: z.string().trim().min(3).max(120),
+    customerAccessMessage: z.string().trim().min(10).max(700),
+    customerPendingTitle: z.string().trim().min(3).max(120),
+    customerPendingMessage: z.string().trim().min(10).max(700),
+  }).parse(Object.fromEntries(formData));
   const currentSettings = tenant.settings as Record<string, unknown>;
   await createTenantDb(membership.tenantId).updateSettings({
-    settings: { ...currentSettings, customerRegistrationEnabled: formData.get("customerRegistrationEnabled") === "on", customerApprovalRequired: formData.get("customerApprovalRequired") === "on" },
+    settings: {
+      ...currentSettings,
+      customerRegistrationEnabled: formData.get("customerRegistrationEnabled") === "on",
+      customerApprovalRequired: formData.get("customerApprovalRequired") === "on",
+      customerAccessTitle: input.customerAccessTitle,
+      customerAccessMessage: input.customerAccessMessage,
+      customerPendingTitle: input.customerPendingTitle,
+      customerPendingMessage: input.customerPendingMessage,
+    },
     branding: tenant.branding as Prisma.InputJsonObject,
   }, session.userId);
   refreshSettings(tenant.slug);
@@ -261,6 +279,8 @@ export async function createCustomDomainAction(formData: FormData) {
 
 export async function deleteCustomDomainAction(formData: FormData) {
   const { session, membership } = await authorize();
+  const features = await effectiveFeatures(membership.tenantId);
+  if (!features.customDomain) throw new Error("Tu plan actual no incluye dominio propio");
   const id = z.string().min(1).parse(formData.get("id"));
   await createTenantDb(membership.tenantId).deleteCustomDomain(id, session.userId);
   clearTenantResolutionCache();
