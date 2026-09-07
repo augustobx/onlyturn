@@ -4,6 +4,7 @@ import "./nanolabs.css";
 import "./admin-ux.css";
 import "./pwa-themes.css";
 import "./public-booking-polish.css";
+import "./customer-registration-alerts.css";
 import "./setup-center.css";
 import "./setup-polish.css";
 import "./lifecycle.css";
