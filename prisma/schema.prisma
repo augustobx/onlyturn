@@ -47,6 +47,41 @@ enum BookingOrigin {
   API
 }
 
+enum BookingType {
+  APPOINTMENT
+  CLASS
+  EVENT
+  RESOURCE
+}
+
+enum AssignmentStrategy {
+  CLIENT_CHOOSES
+  ANY_AVAILABLE
+  ROUND_ROBIN
+  MANUAL
+}
+
+enum SessionStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+enum WaitlistStatus {
+  WAITING
+  OFFERED
+  BOOKED
+  EXPIRED
+  CANCELLED
+}
+
+enum RecurrenceStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
 enum RequirementMode {
   NONE
   OPTIONAL
@@ -152,6 +187,12 @@ model Tenant {
   services            Service[]
   customers           Customer[]
   bookings            Booking[]
+  bookingSessions     BookingSession[]
+  bookingSeries       BookingSeries[]
+  waitlistEntries     WaitlistEntry[]
+  serviceAddons       ServiceAddon[]
+  bookingAddons       BookingAddon[]
+  automationRules     AutomationRule[]
   customFields        CustomField[]
   availability        AvailabilityRule[]
   exceptions          AvailabilityException[]
@@ -171,18 +212,20 @@ model Tenant {
 }
 
 model User {
-  id              String       @id @default(cuid())
-  email           String       @unique
-  name            String
-  passwordHash    String
-  isSuperAdmin    Boolean      @default(false)
-  isActive        Boolean      @default(true)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  memberships     Membership[]
-  sessions        Session[]
-  auditLogs       AuditLog[]   @relation("AuditActor")
-  createdBookings Booking[]    @relation("BookingCreator")
+  id                     String           @id @default(cuid())
+  email                  String           @unique
+  name                   String
+  passwordHash           String
+  isSuperAdmin           Boolean          @default(false)
+  isActive               Boolean          @default(true)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  memberships            Membership[]
+  sessions               Session[]
+  auditLogs              AuditLog[]       @relation("AuditActor")
+  createdBookings        Booking[]        @relation("BookingCreator")
+  createdBookingSessions BookingSession[] @relation("BookingSessionCreator")
+  createdBookingSeries   BookingSeries[]  @relation("BookingSeriesCreator")
 }
 
 model Membership {
@@ -280,6 +323,9 @@ model Location {
   resources        Resource[]
   serviceLocations ServiceLocation[]
   bookings         Booking[]
+  bookingSessions  BookingSession[]
+  bookingSeries    BookingSeries[]
+  waitlistEntries  WaitlistEntry[]
   availability     AvailabilityRule[]
   exceptions       AvailabilityException[]
 
@@ -288,45 +334,51 @@ model Location {
 }
 
 model Professional {
-  id           String                  @id @default(cuid())
-  tenantId     String
-  locationId   String?
-  membershipId String?                 @unique
-  name         String
-  color        String                  @default("#5b5cf0")
-  bio          String?
-  isActive     Boolean                 @default(true)
-  createdAt    DateTime                @default(now())
-  updatedAt    DateTime                @updatedAt
-  tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  location     Location?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  membership   Membership?             @relation(fields: [membershipId], references: [id], onDelete: SetNull)
-  services     ServiceProfessional[]
-  bookings     Booking[]
-  availability AvailabilityRule[]
-  exceptions   AvailabilityException[]
+  id              String                  @id @default(cuid())
+  tenantId        String
+  locationId      String?
+  membershipId    String?                 @unique
+  name            String
+  color           String                  @default("#5b5cf0")
+  bio             String?
+  isActive        Boolean                 @default(true)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  tenant          Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  location        Location?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  membership      Membership?             @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  services        ServiceProfessional[]
+  bookings        Booking[]
+  bookingSessions BookingSession[]
+  bookingSeries   BookingSeries[]
+  waitlistEntries WaitlistEntry[]
+  availability    AvailabilityRule[]
+  exceptions      AvailabilityException[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, locationId])
 }
 
 model Resource {
-  id           String                  @id @default(cuid())
-  tenantId     String
-  locationId   String?
-  name         String
-  type         String?
-  capacity     Int                     @default(1)
-  color        String                  @default("#10b981")
-  isActive     Boolean                 @default(true)
-  createdAt    DateTime                @default(now())
-  updatedAt    DateTime                @updatedAt
-  tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  location     Location?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  services     ServiceResource[]
-  bookings     Booking[]
-  availability AvailabilityRule[]
-  exceptions   AvailabilityException[]
+  id              String                  @id @default(cuid())
+  tenantId        String
+  locationId      String?
+  name            String
+  type            String?
+  capacity        Int                     @default(1)
+  color           String                  @default("#10b981")
+  isActive        Boolean                 @default(true)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  tenant          Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  location        Location?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  services        ServiceResource[]
+  bookings        Booking[]
+  bookingSessions BookingSession[]
+  bookingSeries   BookingSeries[]
+  waitlistEntries WaitlistEntry[]
+  availability    AvailabilityRule[]
+  exceptions      AvailabilityException[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, locationId])
@@ -338,6 +390,8 @@ model Service {
   name               String
   description        String?
   category           String?
+  bookingType        BookingType           @default(APPOINTMENT)
+  assignmentStrategy AssignmentStrategy    @default(CLIENT_CHOOSES)
   durationMinutes    Int
   variableDuration   Boolean               @default(false)
   preparationMinutes Int                   @default(0)
@@ -346,8 +400,13 @@ model Service {
   color              String                @default("#5b5cf0")
   imageKey           String?
   capacity           Int                   @default(1)
+  minPartySize       Int                   @default(1)
+  maxPartySize       Int                   @default(1)
   professionalMode   RequirementMode       @default(OPTIONAL)
   resourceMode       RequirementMode       @default(NONE)
+  bookingPolicy      Json                  @default("{}")
+  allowWaitlist      Boolean               @default(false)
+  allowRecurring     Boolean               @default(false)
   isActive           Boolean               @default(true)
   onlineEnabled      Boolean               @default(true)
   depositPolicy      Json?
@@ -358,9 +417,14 @@ model Service {
   resources          ServiceResource[]
   locations          ServiceLocation[]
   bookings           Booking[]
+  bookingSessions    BookingSession[]
+  bookingSeries      BookingSeries[]
+  waitlistEntries    WaitlistEntry[]
+  addons             ServiceAddon[]
   customFields       CustomField[]
 
   @@index([tenantId, isActive, onlineEnabled])
+  @@index([tenantId, bookingType, isActive])
 }
 
 model ServiceProfessional {
@@ -394,6 +458,26 @@ model ServiceLocation {
 
   @@id([serviceId, locationId])
   @@index([tenantId, locationId])
+}
+
+model ServiceAddon {
+  id                 String         @id @default(cuid())
+  tenantId           String
+  serviceId          String
+  name               String
+  description        String?
+  priceCents         Int            @default(0)
+  durationMinutes    Int            @default(0)
+  preparationMinutes Int            @default(0)
+  isActive           Boolean        @default(true)
+  sortOrder          Int            @default(0)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  tenant             Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  service            Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  bookingAddons      BookingAddon[]
+
+  @@index([tenantId, serviceId, isActive, sortOrder])
 }
 
 model AvailabilityRule {
@@ -457,6 +541,8 @@ model Customer {
   archivedAt      DateTime?
   tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   bookings        Booking[]
+  bookingSeries   BookingSeries[]
+  waitlistEntries WaitlistEntry[]
   customValues    CustomFieldValue[]
   account         CustomerAccount?
   ledgerEntries   CustomerLedgerEntry[]
@@ -528,6 +614,9 @@ model Booking {
   serviceId           String
   professionalId      String?
   resourceId          String?
+  sessionId           String?
+  seriesId            String?
+  partySize           Int                  @default(1)
   startsAt            DateTime
   endsAt              DateTime
   capacityStartsAt    DateTime
@@ -552,9 +641,13 @@ model Booking {
   service             Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   professional        Professional?        @relation(fields: [professionalId], references: [id], onDelete: Restrict)
   resource            Resource?            @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  session             BookingSession?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  series              BookingSeries?       @relation(fields: [seriesId], references: [id], onDelete: SetNull)
   createdBy           User?                @relation("BookingCreator", fields: [createdById], references: [id], onDelete: SetNull)
   history             BookingHistory[]
   customValues        CustomFieldValue[]
+  addons              BookingAddon[]
+  waitlistConversion  WaitlistEntry?       @relation("WaitlistConversion")
   notificationLogs    NotificationLog[]
   paymentTransactions PaymentTransaction[]
 
@@ -564,6 +657,128 @@ model Booking {
   @@index([tenantId, professionalId, startsAt])
   @@index([tenantId, resourceId, startsAt])
   @@index([tenantId, customerId, startsAt])
+  @@index([tenantId, sessionId])
+  @@index([tenantId, seriesId])
+}
+
+model BookingSession {
+  id               String        @id @default(cuid())
+  tenantId         String
+  locationId       String
+  serviceId        String
+  professionalId   String?
+  resourceId       String?
+  seriesId         String?
+  title            String?
+  startsAt         DateTime
+  endsAt           DateTime
+  capacityStartsAt DateTime
+  capacityEndsAt   DateTime
+  capacity         Int
+  status           SessionStatus @default(SCHEDULED)
+  onlineEnabled    Boolean       @default(true)
+  notes            String?
+  createdById      String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  location         Location      @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  service          Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  professional     Professional? @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  resource         Resource?     @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  series           BookingSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  createdBy        User?         @relation("BookingSessionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  bookings         Booking[]
+  waitlistEntries  WaitlistEntry[]
+
+  @@index([tenantId, startsAt, endsAt])
+  @@index([tenantId, locationId, startsAt])
+  @@index([tenantId, professionalId, startsAt])
+  @@index([tenantId, resourceId, startsAt])
+  @@index([tenantId, serviceId, status, startsAt])
+}
+
+model BookingSeries {
+  id                 String           @id @default(cuid())
+  tenantId           String
+  customerId         String?
+  serviceId          String
+  locationId         String
+  professionalId     String?
+  resourceId         String?
+  bookingType        BookingType
+  rrule              String
+  timezone           String
+  anchorStartsAt     DateTime
+  durationMinutes    Int
+  status             RecurrenceStatus @default(ACTIVE)
+  createdById        String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  tenant             Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer           Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  service            Service          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  location           Location         @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  professional       Professional?    @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  resource           Resource?        @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  createdBy          User?            @relation("BookingSeriesCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  bookings           Booking[]
+  sessions           BookingSession[]
+
+  @@index([tenantId, status, anchorStartsAt])
+  @@index([tenantId, customerId])
+  @@index([tenantId, serviceId])
+}
+
+model WaitlistEntry {
+  id             String         @id @default(cuid())
+  tenantId       String
+  customerId     String
+  serviceId      String
+  locationId     String
+  professionalId String?
+  resourceId     String?
+  sessionId      String?
+  bookedBookingId String?       @unique
+  status         WaitlistStatus @default(WAITING)
+  partySize      Int            @default(1)
+  preferredFrom  DateTime?
+  preferredUntil DateTime?
+  preferences    Json           @default("{}")
+  offeredAt      DateTime?
+  offerExpiresAt DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer       Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  service        Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  location       Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  professional   Professional?  @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  resource       Resource?      @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  session        BookingSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  bookedBooking  Booking?       @relation("WaitlistConversion", fields: [bookedBookingId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, serviceId, locationId, status])
+  @@index([tenantId, sessionId, status])
+}
+
+model BookingAddon {
+  id              String        @id @default(cuid())
+  tenantId        String
+  bookingId       String
+  addonId         String?
+  name            String
+  quantity        Int           @default(1)
+  priceCents      Int           @default(0)
+  durationMinutes Int           @default(0)
+  createdAt       DateTime      @default(now())
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  addon           ServiceAddon? @relation(fields: [addonId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, addonId])
 }
 
 model BookingHistory {
@@ -617,6 +832,23 @@ model CustomFieldValue {
   @@unique([customFieldId, customerId])
   @@index([tenantId, bookingId])
   @@index([tenantId, customerId])
+}
+
+model AutomationRule {
+  id            String              @id @default(cuid())
+  tenantId      String
+  name          String
+  event         String
+  channel       NotificationChannel
+  offsetMinutes Int                 @default(0)
+  template      Json
+  filters       Json?
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, event, isActive])
 }
 
 model NotificationLog {
