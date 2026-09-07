@@ -3,8 +3,9 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { platformDb } from "@/lib/db";
 import { createSession, destroySession, verifyPassword } from "@/lib/auth";
-import { findTenantOwnership, getRequestHostname, tenantHasOperationalAccess } from "@/lib/tenant-context";
+import { findTenantOwnership, getRequestHostname } from "@/lib/tenant-context";
 import { isPlatformHostname } from "@/lib/hostnames";
+import { reconcileTenantMembership } from "@/lib/membership";
 
 const credentialsSchema = z.object({
   email: z.email(),
@@ -18,7 +19,9 @@ export async function loginAction(_: { error?: string } | undefined, formData: F
   const hostname = await getRequestHostname();
   const tenant = await findTenantOwnership(hostname);
   if (!tenant || tenant.isPlatform) return { error: "Este acceso pertenece a un tenant de OnlyTurn." };
-  if (!tenantHasOperationalAccess(tenant)) return { error: "El servicio de este negocio se encuentra suspendido." };
+
+  const access = await reconcileTenantMembership(tenant.id);
+  if (!access?.allowed) return { error: "El servicio de este negocio se encuentra suspendido." };
 
   const user = await platformDb.user.findUnique({
     where: { email: parsed.data.email.toLowerCase() },
