@@ -1,6 +1,7 @@
 import { Building2, Pencil, Plus, RotateCcw, Users, Wrench, XCircle } from "lucide-react";
 import { requireTenantSession } from "@/lib/auth";
 import { getStructureManagementData } from "@/lib/structure-management";
+import { FeedbackForm } from "@/components/feedback-form";
 import {
   createLocationAction,
   createProfessionalAction,
@@ -24,7 +25,7 @@ export default async function StructureSetupPage() {
     <div className="page-title">
       <span className="eyebrow">Paso 2 · Estructura</span>
       <h1>Sedes, profesionales y recursos</h1>
-      <p className="muted">Creá, editá, desactivá o recuperá la estructura del negocio sin perder historial ni reservas anteriores.</p>
+      <p className="muted">Creá, editá, desactivá o recuperá la estructura del negocio. Cada acción confirma si se guardó o muestra el motivo exacto si no pudo aplicarse.</p>
     </div>
 
     <section className="setup-structure-grid">
@@ -38,29 +39,29 @@ export default async function StructureSetupPage() {
               <span className={`status ${entry.isActive ? "ACTIVE" : "SUSPENDED"}`}>{entry.isActive ? "Activa" : "Inactiva"}</span>
             </summary>
             <div className="setup-manage-panel">
-              <form action={updateLocationAction} className="setup-edit-form">
+              <FeedbackForm action={updateLocationAction} className="setup-edit-form" savedMessage="Sede actualizada">
                 <input type="hidden" name="locationId" value={entry.id} />
                 <div className="field"><label>Nombre</label><input className="input" name="name" defaultValue={entry.name} required /></div>
                 <div className="field"><label>Dirección</label><input className="input" name="address" defaultValue={entry.address ?? ""} /></div>
-                <button className="button secondary"><Pencil size={14} /> Guardar cambios</button>
-              </form>
-              <form action={setLocationActiveAction} className="setup-lifecycle-action">
+                <button className="button secondary" type="submit"><Pencil size={14} /> Guardar cambios</button>
+              </FeedbackForm>
+              <FeedbackForm action={setLocationActiveAction} className="setup-lifecycle-action" savedMessage={entry.isActive ? "Sede desactivada" : "Sede reactivada"}>
                 <input type="hidden" name="locationId" value={entry.id} />
                 <input type="hidden" name="active" value={entry.isActive ? "false" : "true"} />
-                <button className={`button ${entry.isActive ? "ghost danger-action" : "secondary"}`}>
+                <button type="submit" className={`button ${entry.isActive ? "ghost danger-action" : "secondary"}`}>
                   {entry.isActive ? <><XCircle size={14} /> Desactivar sede</> : <><RotateCcw size={14} /> Reactivar sede</>}
                 </button>
                 <small className="muted">{entry.isActive ? "Se bloqueará si tiene reservas o sesiones futuras." : "Vuelve a estar disponible para nuevas configuraciones."}</small>
-              </form>
+              </FeedbackForm>
             </div>
           </details>) : <div className="empty">Todavía no hay sedes.</div>}
         </div>
-        <form action={createLocationAction} className="setup-inline-form">
+        <FeedbackForm action={createLocationAction} className="setup-inline-form" savedMessage="Sede agregada">
           <div className="setup-inline-form-head"><Plus size={14} /><strong>Agregar sede</strong></div>
           <input className="input" name="name" placeholder="Ej. Sucursal Centro" required />
           <input className="input" name="address" placeholder="Dirección (opcional)" />
-          <button className="button secondary">Agregar</button>
-        </form>
+          <button className="button secondary" type="submit">Agregar</button>
+        </FeedbackForm>
       </div>
 
       <div className="card setup-entity-card">
@@ -73,29 +74,29 @@ export default async function StructureSetupPage() {
               <span className={`status ${entry.isActive ? "ACTIVE" : "SUSPENDED"}`}>{entry.isActive ? "Activo" : "Inactivo"}</span>
             </summary>
             <div className="setup-manage-panel">
-              <form action={updateProfessionalAction} className="setup-edit-form">
+              <FeedbackForm action={updateProfessionalAction} className="setup-edit-form" savedMessage="Profesional actualizado">
                 <input type="hidden" name="professionalId" value={entry.id} />
                 <div className="field"><label>Nombre</label><input className="input" name="name" defaultValue={entry.name} required /></div>
                 <div className="field"><label>Sede fija</label><select className="select" name="locationId" defaultValue={entry.locationId ?? ""}><option value="">Sin sede fija</option>{activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></div>
-                <div className="setup-color-submit"><input type="color" name="color" defaultValue={entry.color} aria-label="Color en agenda" /><button className="button secondary"><Pencil size={14} /> Guardar cambios</button></div>
-              </form>
-              <form action={setProfessionalActiveAction} className="setup-lifecycle-action">
+                <div className="setup-color-submit"><input type="color" name="color" defaultValue={entry.color} aria-label="Color en agenda" /><button className="button secondary" type="submit"><Pencil size={14} /> Guardar cambios</button></div>
+              </FeedbackForm>
+              <FeedbackForm action={setProfessionalActiveAction} className="setup-lifecycle-action" savedMessage={entry.isActive ? "Profesional desactivado" : "Profesional reactivado"}>
                 <input type="hidden" name="professionalId" value={entry.id} />
                 <input type="hidden" name="active" value={entry.isActive ? "false" : "true"} />
-                <button className={`button ${entry.isActive ? "ghost danger-action" : "secondary"}`}>
+                <button type="submit" className={`button ${entry.isActive ? "ghost danger-action" : "secondary"}`}>
                   {entry.isActive ? <><XCircle size={14} /> Desactivar profesional</> : <><RotateCcw size={14} /> Reactivar profesional</>}
                 </button>
                 <small className="muted">{entry.isActive ? "No se puede desactivar si tiene actividad futura." : "Conserva historial, servicios y reservas anteriores."}</small>
-              </form>
+              </FeedbackForm>
             </div>
           </details>) : <div className="empty">Todavía no hay profesionales.</div>}
         </div>
-        <form action={createProfessionalAction} className="setup-inline-form">
+        <FeedbackForm action={createProfessionalAction} className="setup-inline-form" savedMessage="Profesional agregado">
           <div className="setup-inline-form-head"><Plus size={14} /><strong>Agregar profesional</strong></div>
           <input className="input" name="name" placeholder="Nombre" required />
           <select className="select" name="locationId" defaultValue=""><option value="">Sin sede fija</option>{activeLocations.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}</select>
-          <div className="setup-color-submit"><input type="color" name="color" defaultValue="#2563eb" aria-label="Color en agenda" /><button className="button secondary">Agregar</button></div>
-        </form>
+          <div className="setup-color-submit"><input type="color" name="color" defaultValue="#2563eb" aria-label="Color en agenda" /><button className="button secondary" type="submit">Agregar</button></div>
+        </FeedbackForm>
       </div>
 
       <div className="card setup-entity-card">
@@ -108,32 +109,32 @@ export default async function StructureSetupPage() {
               <span className={`status ${entry.isActive ? "ACTIVE" : "SUSPENDED"}`}>{entry.isActive ? "Activo" : "Inactivo"}</span>
             </summary>
             <div className="setup-manage-panel">
-              <form action={updateResourceAction} className="setup-edit-form">
+              <FeedbackForm action={updateResourceAction} className="setup-edit-form" savedMessage="Recurso actualizado">
                 <input type="hidden" name="resourceId" value={entry.id} />
                 <div className="field"><label>Nombre</label><input className="input" name="name" defaultValue={entry.name} required /></div>
                 <div className="field"><label>Tipo</label><input className="input" name="type" defaultValue={entry.type ?? ""} /></div>
                 <div className="field"><label>Capacidad</label><input className="input" name="capacity" type="number" min="1" max="1000" defaultValue={entry.capacity} required /></div>
                 <div className="field"><label>Sede fija</label><select className="select" name="locationId" defaultValue={entry.locationId ?? ""}><option value="">Sin sede fija</option>{activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></div>
-                <div className="setup-color-submit"><input type="color" name="color" defaultValue={entry.color} aria-label="Color en agenda" /><button className="button secondary"><Pencil size={14} /> Guardar cambios</button></div>
-              </form>
-              <form action={setResourceActiveAction} className="setup-lifecycle-action">
+                <div className="setup-color-submit"><input type="color" name="color" defaultValue={entry.color} aria-label="Color en agenda" /><button className="button secondary" type="submit"><Pencil size={14} /> Guardar cambios</button></div>
+              </FeedbackForm>
+              <FeedbackForm action={setResourceActiveAction} className="setup-lifecycle-action" savedMessage={entry.isActive ? "Recurso desactivado" : "Recurso reactivado"}>
                 <input type="hidden" name="resourceId" value={entry.id} />
                 <input type="hidden" name="active" value={entry.isActive ? "false" : "true"} />
-                <button className={`button ${entry.isActive ? "ghost danger-action" : "secondary"}`}>
+                <button type="submit" className={`button ${entry.isActive ? "ghost danger-action" : "secondary"}`}>
                   {entry.isActive ? <><XCircle size={14} /> Desactivar recurso</> : <><RotateCcw size={14} /> Reactivar recurso</>}
                 </button>
                 <small className="muted">{entry.isActive ? "Se bloqueará si el recurso tiene reservas o sesiones futuras." : "El historial y sus relaciones se conservan."}</small>
-              </form>
+              </FeedbackForm>
             </div>
           </details>) : <div className="empty">Todavía no hay recursos.</div>}
         </div>
-        <form action={createResourceAction} className="setup-inline-form">
+        <FeedbackForm action={createResourceAction} className="setup-inline-form" savedMessage="Recurso agregado">
           <div className="setup-inline-form-head"><Plus size={14} /><strong>Agregar recurso</strong></div>
           <input className="input" name="name" placeholder="Sala, cancha, box, equipo…" required />
           <div className="grid" style={{ gridTemplateColumns: "1fr 100px", gap: 8 }}><input className="input" name="type" placeholder="Tipo" /><input className="input" name="capacity" type="number" min="1" max="1000" defaultValue="1" aria-label="Capacidad" /></div>
           <select className="select" name="locationId" defaultValue=""><option value="">Sin sede fija</option>{activeLocations.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}</select>
-          <div className="setup-color-submit"><input type="color" name="color" defaultValue="#10b981" aria-label="Color en agenda" /><button className="button secondary">Agregar</button></div>
-        </form>
+          <div className="setup-color-submit"><input type="color" name="color" defaultValue="#10b981" aria-label="Color en agenda" /><button className="button secondary" type="submit">Agregar</button></div>
+        </FeedbackForm>
       </div>
     </section>
 
