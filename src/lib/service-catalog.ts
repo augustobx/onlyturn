@@ -74,6 +74,21 @@ export async function getUniversalServiceCatalog(tenantId: string) {
   ] as const);
 }
 
+export async function getArchivedServices(tenantId: string) {
+  return platformDb.service.findMany({
+    where: { tenantId, isActive: false },
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      bookingType: true,
+      updatedAt: true,
+      _count: { select: { bookings: true, bookingSessions: true } },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
 export async function createUniversalService(tenantId: string, input: UniversalServiceInput, actorId: string) {
   const assignments = normalizedAssignments(input);
   const normalized = { ...input, ...assignments };
@@ -219,6 +234,40 @@ export async function archiveUniversalService(tenantId: string, serviceId: strin
         tenantId,
         actorId,
         action: "service.archived",
+        entityType: "Service",
+        entityId: service.id,
+        metadata: { name: service.name },
+      },
+    }),
+  ]);
+}
+
+export async function restoreUniversalService(tenantId: string, serviceId: string, actorId: string) {
+  const service = await platformDb.service.findFirst({
+    where: { id: serviceId, tenantId, isActive: false },
+    include: {
+      locations: { include: { location: true } },
+      professionals: { include: { professional: true } },
+      resources: { include: { resource: true } },
+    },
+  });
+  if (!service) throw new Error("Servicio archivado inexistente");
+  if (!service.locations.some((entry) => entry.location.isActive)) throw new Error("Reactivá primero al menos una sede vinculada a este servicio");
+  if (service.professionalMode === "REQUIRED" && !service.professionals.some((entry) => entry.professional.isActive)) {
+    throw new Error("Reactivá primero al menos un profesional vinculado a este servicio");
+  }
+  if (service.resourceMode === "REQUIRED" && !service.resources.some((entry) => entry.resource.isActive)) {
+    throw new Error("Reactivá primero al menos un recurso vinculado a este servicio");
+  }
+
+  await platformDb.$transaction([
+    platformDb.service.update({ where: { id: service.id }, data: { isActive: true } }),
+    platformDb.auditLog.create({
+      data: {
+        scope: "TENANT",
+        tenantId,
+        actorId,
+        action: "service.reactivated",
         entityType: "Service",
         entityId: service.id,
         metadata: { name: service.name },
