@@ -15,7 +15,7 @@ const paymentInput = z.object({
 });
 
 export async function registerBookingPaymentAction(formData: FormData) {
-  const { session, membership } = await requireTenantSession();
+  const { session, membership, tenant } = await requireTenantSession();
   if (!can(membership.role, membership.permissions, "bookings:manage")) throw new Error("No tenés permisos para registrar cobros.");
   const input = paymentInput.parse(Object.fromEntries(formData));
   const amountCents = Math.round(input.amount * 100);
@@ -29,9 +29,9 @@ export async function registerBookingPaymentAction(formData: FormData) {
     if (booking.status === "CANCELLED") throw new Error("No se puede cobrar un turno cancelado.");
     const totalCents = booking.priceCents ?? 0;
     const remainingCents = Math.max(0, totalCents - booking.paymentAmountCents);
-    if (totalCents > 0 && amountCents > remainingCents) throw new Error(`El cobro supera el saldo pendiente de ${(remainingCents / 100).toLocaleString("es-AR", { style: "currency", currency: "ARS" })}.`);
+    if (totalCents > 0 && amountCents > remainingCents) throw new Error(`El cobro supera el saldo pendiente de ${(remainingCents / 100).toLocaleString("es-AR", { style: "currency", currency: tenant.currency })}.`);
     const newPaid = booking.paymentAmountCents + amountCents;
-    const paymentStatus = totalCents > 0 && newPaid >= totalCents ? "PAID" : "AUTHORIZED";
+    const paymentStatus = totalCents === 0 || newPaid >= totalCents ? "PAID" : "PENDING";
 
     await tx.booking.update({ where: { id: booking.id }, data: { paymentAmountCents: newPaid, paymentStatus } });
     await tx.bookingHistory.create({
