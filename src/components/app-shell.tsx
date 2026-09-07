@@ -18,14 +18,14 @@ import { useState } from "react";
 import { logoutAction } from "@/app/actions/auth";
 
 const tenantLinks = [
-  { href: "/app", label: "Resumen", icon: LayoutDashboard },
-  { href: "/app/agenda", label: "Agenda", icon: CalendarDays },
-  { href: "/app/clientes", label: "Clientes", icon: Users },
-  { href: "/app/catalogo", label: "Servicios y equipo", icon: BriefcaseBusiness },
-  { href: "/app/configuracion", label: "Configuración", icon: Settings },
+  { href: "/dashboard", internal: "/app", label: "Resumen", icon: LayoutDashboard },
+  { href: "/agenda", internal: "/app/agenda", label: "Agenda", icon: CalendarDays },
+  { href: "/clientes", internal: "/app/clientes", label: "Clientes", icon: Users },
+  { href: "/servicios", internal: "/app/catalogo", label: "Servicios y equipo", icon: BriefcaseBusiness },
+  { href: "/configuracion", internal: "/app/configuracion", label: "Configuración", icon: Settings },
 ];
 
-const platformLinks = [{ href: "/superadmin", label: "Plataforma", icon: ShieldCheck }];
+const platformLinks = [{ href: "/superadmin", internal: "/superadmin", label: "Plataforma", icon: ShieldCheck }];
 
 export function AppShell({
   children,
@@ -42,8 +42,11 @@ export function AppShell({
   const [open, setOpen] = useState(false);
   const links = superAdmin ? platformLinks : tenantLinks;
 
-  const isActive = (href: string) =>
-    href === "/app" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string, internal: string) => {
+    const publicMatch = href === "/dashboard" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+    const internalMatch = internal === "/app" ? pathname === internal : pathname === internal || pathname.startsWith(`${internal}/`);
+    return publicMatch || internalMatch;
+  };
 
   return (
     <div className="shell nanolabs-shell">
@@ -61,8 +64,8 @@ export function AppShell({
         </div>
 
         <nav className="nav" aria-label="Navegación principal">
-          {links.map(({ href, label, icon: Icon }) => (
-            <Link className={isActive(href) ? "active" : undefined} key={href} href={href} onClick={() => setOpen(false)}>
+          {links.map(({ href, internal, label, icon: Icon }) => (
+            <Link className={isActive(href, internal) ? "active" : undefined} key={href} href={href} onClick={() => setOpen(false)}>
               <Icon size={18} />
               <span>{label}</span>
             </Link>
