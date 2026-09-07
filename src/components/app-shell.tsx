@@ -1,14 +1,24 @@
 "use client";
 
 import {
+  BadgeCheck,
+  BarChart3,
+  BellRing,
   BriefcaseBusiness,
   CalendarCheck2,
+  CalendarClock,
   CalendarDays,
+  CalendarRange,
+  CalendarSync,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Menu,
+  Repeat2,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -20,8 +30,18 @@ import { logoutAction } from "@/app/actions/auth";
 const tenantLinks = [
   { href: "/dashboard", internal: "/app", label: "Resumen", icon: LayoutDashboard },
   { href: "/agenda", internal: "/app/agenda", label: "Agenda", icon: CalendarDays },
-  { href: "/clientes", internal: "/app/clientes", label: "Clientes", icon: Users },
+  { href: "/sesiones", internal: "/app/sesiones", label: "Clases y eventos", icon: CalendarRange },
+  { href: "/recurrencias", internal: "/app/recurrencias", label: "Recurrencias", icon: Repeat2 },
+  { href: "/lista-espera", internal: "/app/lista-espera", label: "Lista de espera", icon: ListChecks },
+  { href: "/clientes", internal: "/app/clientes", label: "Clientes / CRM", icon: Users },
   { href: "/servicios", internal: "/app/catalogo", label: "Servicios y equipo", icon: BriefcaseBusiness },
+  { href: "/extras", internal: "/app/extras", label: "Extras", icon: Sparkles },
+  { href: "/paquetes", internal: "/app/paquetes", label: "Paquetes y membresías", icon: BadgeCheck },
+  { href: "/disponibilidad", internal: "/app/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
+  { href: "/politicas", internal: "/app/politicas", label: "Políticas", icon: SlidersHorizontal },
+  { href: "/automatizaciones", internal: "/app/automatizaciones", label: "Automatizaciones", icon: BellRing },
+  { href: "/calendario", internal: "/app/calendario", label: "Calendarios", icon: CalendarSync },
+  { href: "/reportes", internal: "/app/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/configuracion", internal: "/app/configuracion", label: "Configuración", icon: Settings },
 ];
 
