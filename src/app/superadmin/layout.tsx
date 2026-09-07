@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Building2, CheckCircle2, Layers3, LayoutDashboard, LogOut, Shield } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { getSession } from "@/lib/auth";
+import "./superadmin.css";
 
 export default async function SuperAdminLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
