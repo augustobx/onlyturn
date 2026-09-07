@@ -80,6 +80,10 @@ function parseServiceForm(formData: FormData) {
 function refreshCatalog() {
   revalidatePath("/app/catalogo");
   revalidatePath("/servicios");
+  revalidatePath("/app/estructura");
+  revalidatePath("/estructura");
+  revalidatePath("/app/configurar");
+  revalidatePath("/configurar");
   revalidatePath("/");
 }
 
