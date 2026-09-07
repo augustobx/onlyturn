@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireTenantSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -100,6 +101,20 @@ function refreshCatalog() {
   revalidatePath("/");
 }
 
+function structureActionMessage(error: unknown) {
+  if (error instanceof z.ZodError) return "Revisá los datos enviados e intentá nuevamente.";
+  if (error instanceof Error) {
+    if (error.message === "Forbidden") return "No tenés permisos para realizar este cambio.";
+    if (error.message.trim()) return error.message.slice(0, 500);
+  }
+  return "No se pudo completar la operación. Intentá nuevamente.";
+}
+
+function redirectStructureError(error: unknown): never {
+  const message = encodeURIComponent(structureActionMessage(error));
+  redirect(`/estructura/resultado?status=error&message=${message}`);
+}
+
 const locationSchema = z.object({
   locationId: z.string().min(1),
   name: z.string().trim().min(2).max(100),
@@ -134,17 +149,25 @@ export async function createLocationAction(formData: FormData) {
 }
 
 export async function updateLocationAction(formData: FormData) {
-  const { membership, session } = await authorize();
-  const input = locationSchema.parse(Object.fromEntries(formData));
-  await updateLocation(membership.tenantId, input.locationId, { name: input.name, address: input.address || undefined }, session.userId);
-  refreshCatalog();
+  try {
+    const { membership, session } = await authorize();
+    const input = locationSchema.parse(Object.fromEntries(formData));
+    await updateLocation(membership.tenantId, input.locationId, { name: input.name, address: input.address || undefined }, session.userId);
+    refreshCatalog();
+  } catch (error) {
+    redirectStructureError(error);
+  }
 }
 
 export async function setLocationActiveAction(formData: FormData) {
-  const { membership, session } = await authorize();
-  const input = z.object({ locationId: z.string().min(1), active: z.enum(["true", "false"]) }).parse(Object.fromEntries(formData));
-  await setLocationActive(membership.tenantId, input.locationId, input.active === "true", session.userId);
-  refreshCatalog();
+  try {
+    const { membership, session } = await authorize();
+    const input = z.object({ locationId: z.string().min(1), active: z.enum(["true", "false"]) }).parse(Object.fromEntries(formData));
+    await setLocationActive(membership.tenantId, input.locationId, input.active === "true", session.userId);
+    refreshCatalog();
+  } catch (error) {
+    redirectStructureError(error);
+  }
 }
 
 export async function createProfessionalAction(formData: FormData) {
@@ -160,17 +183,25 @@ export async function createProfessionalAction(formData: FormData) {
 }
 
 export async function updateProfessionalAction(formData: FormData) {
-  const { membership, session } = await authorize();
-  const input = professionalSchema.parse(Object.fromEntries(formData));
-  await updateProfessional(membership.tenantId, input.professionalId, { name: input.name, locationId: input.locationId || undefined, color: input.color }, session.userId);
-  refreshCatalog();
+  try {
+    const { membership, session } = await authorize();
+    const input = professionalSchema.parse(Object.fromEntries(formData));
+    await updateProfessional(membership.tenantId, input.professionalId, { name: input.name, locationId: input.locationId || undefined, color: input.color }, session.userId);
+    refreshCatalog();
+  } catch (error) {
+    redirectStructureError(error);
+  }
 }
 
 export async function setProfessionalActiveAction(formData: FormData) {
-  const { membership, session } = await authorize();
-  const input = z.object({ professionalId: z.string().min(1), active: z.enum(["true", "false"]) }).parse(Object.fromEntries(formData));
-  await setProfessionalActive(membership.tenantId, input.professionalId, input.active === "true", session.userId);
-  refreshCatalog();
+  try {
+    const { membership, session } = await authorize();
+    const input = z.object({ professionalId: z.string().min(1), active: z.enum(["true", "false"]) }).parse(Object.fromEntries(formData));
+    await setProfessionalActive(membership.tenantId, input.professionalId, input.active === "true", session.userId);
+    refreshCatalog();
+  } catch (error) {
+    redirectStructureError(error);
+  }
 }
 
 export async function createResourceAction(formData: FormData) {
@@ -188,17 +219,25 @@ export async function createResourceAction(formData: FormData) {
 }
 
 export async function updateResourceAction(formData: FormData) {
-  const { membership, session } = await authorize();
-  const input = resourceSchema.parse(Object.fromEntries(formData));
-  await updateResource(membership.tenantId, input.resourceId, { name: input.name, locationId: input.locationId || undefined, type: input.type || undefined, capacity: input.capacity, color: input.color }, session.userId);
-  refreshCatalog();
+  try {
+    const { membership, session } = await authorize();
+    const input = resourceSchema.parse(Object.fromEntries(formData));
+    await updateResource(membership.tenantId, input.resourceId, { name: input.name, locationId: input.locationId || undefined, type: input.type || undefined, capacity: input.capacity, color: input.color }, session.userId);
+    refreshCatalog();
+  } catch (error) {
+    redirectStructureError(error);
+  }
 }
 
 export async function setResourceActiveAction(formData: FormData) {
-  const { membership, session } = await authorize();
-  const input = z.object({ resourceId: z.string().min(1), active: z.enum(["true", "false"]) }).parse(Object.fromEntries(formData));
-  await setResourceActive(membership.tenantId, input.resourceId, input.active === "true", session.userId);
-  refreshCatalog();
+  try {
+    const { membership, session } = await authorize();
+    const input = z.object({ resourceId: z.string().min(1), active: z.enum(["true", "false"]) }).parse(Object.fromEntries(formData));
+    await setResourceActive(membership.tenantId, input.resourceId, input.active === "true", session.userId);
+    refreshCatalog();
+  } catch (error) {
+    redirectStructureError(error);
+  }
 }
 
 export async function createServiceAction(formData: FormData) {
