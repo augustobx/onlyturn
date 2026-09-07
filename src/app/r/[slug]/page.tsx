@@ -1,10 +1,11 @@
 /* eslint-disable @next/next/no-img-element */
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getPublicCatalog, getPublicExperience, getPublicTenant } from "@/lib/booking-service";
 import { BookingWizard } from "./booking-wizard";
 import { AnnouncementBoard } from "./announcement-board";
 import { getCustomerSession } from "@/lib/customer-auth";
+import { platformDb } from "@/lib/db";
 
 type Branding = { primaryColor?: string; description?: string; logoUrl?: string; coverUrl?: string; splashUrl?: string };
 
@@ -16,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: `Reservar en ${tenant.name}`,
     description: branding.description ?? `Reservá tu turno online en ${tenant.name}`,
-    manifest: `/r/${slug}/manifest.webmanifest`,
+    manifest: "/manifest.webmanifest",
     icons: branding.logoUrl ? { icon: branding.logoUrl } : { icon: "/icon.svg" },
   };
 }
@@ -24,7 +25,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function PublicBookingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const tenant = await getPublicTenant(slug);
-  if (!tenant) notFound();
+  if (!tenant) {
+    const ownedTenant = await platformDb.tenant.findFirst({ where: { slug, archivedAt: null }, select: { status: true } });
+    if (ownedTenant && !["ACTIVE", "TRIAL"].includes(ownedTenant.status)) redirect("/suspendido");
+    notFound();
+  }
 
   const [[locations, services], experience, customerSession] = await Promise.all([
     getPublicCatalog(tenant.id),
@@ -45,7 +50,7 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
     <div className="public-hero"><div className="booking-wrap"><div className="public-brand-v2">
       {branding.logoUrl ? <img src={branding.logoUrl} alt={`Logo de ${tenant.name}`} /> : <div className="logo">{tenant.name[0]}</div>}
       <div><h1>{tenant.name}</h1><p>{branding.description ?? "Reservá tu turno en pocos minutos"}</p></div>
-      <a className="public-account-link" href={`/r/${slug}/${customerSession ? "mi-cuenta" : "cuenta"}`}>{customerSession ? `Hola, ${customerSession.account.customer.firstName}` : "Ingresar / registrarme"}</a>
+      <a className="public-account-link" href={customerSession ? "/mi-cuenta" : "/cuenta"}>{customerSession ? `Hola, ${customerSession.account.customer.firstName}` : "Ingresar / registrarme"}</a>
     </div></div></div>
     <div className="booking-wrap booking-content-v2">
       <BookingWizard
