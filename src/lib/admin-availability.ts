@@ -14,6 +14,7 @@ export async function getAdminFreeSlots(input: {
   serviceId: string;
   professionalId?: string;
   resourceId?: string;
+  excludeBookingId?: string;
 }): Promise<AdminFreeSlot[]> {
   const [tenant, service] = await Promise.all([
     platformDb.tenant.findUniqueOrThrow({ where: { id: input.tenantId }, select: { timezone: true, settings: true } }),
@@ -86,6 +87,7 @@ export async function getAdminFreeSlots(input: {
       where: {
         tenantId: input.tenantId,
         consumesCapacity: true,
+        ...(input.excludeBookingId ? { id: { not: input.excludeBookingId } } : {}),
         capacityStartsAt: { lt: rangeEnd },
         capacityEndsAt: { gt: rangeStart },
         ...(assignmentFilters.length ? { OR: assignmentFilters } : { serviceId: service.id, locationId: input.locationId, professionalId: null, resourceId: null }),
