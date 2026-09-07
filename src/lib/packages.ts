@@ -1,6 +1,7 @@
 import "server-only";
 
 import { addDays } from "date-fns";
+import type { Prisma } from "@prisma/client";
 import { platformDb } from "./db";
 
 export async function getPackageManagementData(tenantId: string) {
@@ -106,4 +107,64 @@ export async function cancelCustomerPackage(tenantId: string, customerPackageId:
     platformDb.customerPackage.update({ where: { id: membership.id }, data: { status: "CANCELLED" } }),
     platformDb.auditLog.create({ data: { scope: "TENANT", tenantId, actorId, action: "customer_package.cancelled", entityType: "CustomerPackage", entityId: membership.id } }),
   ]);
+}
+
+export async function consumeCustomerPackage(tx: Prisma.TransactionClient, input: {
+  tenantId: string;
+  customerId: string;
+  customerPackageId: string;
+  serviceId: string;
+  bookingId: string;
+  uses: number;
+}) {
+  const now = new Date();
+  const membership = await tx.customerPackage.findFirst({
+    where: {
+      id: input.customerPackageId,
+      tenantId: input.tenantId,
+      customerId: input.customerId,
+      status: "ACTIVE",
+      remainingUses: { gte: input.uses },
+      startsAt: { lte: now },
+      OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      package: { services: { some: { serviceId: input.serviceId } } },
+    },
+    select: { id: true },
+  });
+  if (!membership) throw new Error("El paquete elegido no está disponible para esta reserva");
+
+  const consumed = await tx.customerPackage.updateMany({
+    where: { id: membership.id, tenantId: input.tenantId, status: "ACTIVE", remainingUses: { gte: input.uses } },
+    data: { remainingUses: { decrement: input.uses } },
+  });
+  if (consumed.count !== 1) throw new Error("Los usos del paquete cambiaron mientras reservabas. Volvé a intentar.");
+
+  await tx.packageUsage.create({
+    data: {
+      tenantId: input.tenantId,
+      customerPackageId: membership.id,
+      bookingId: input.bookingId,
+      uses: input.uses,
+    },
+  });
+
+  const updated = await tx.customerPackage.findUniqueOrThrow({ where: { id: membership.id }, select: { remainingUses: true } });
+  if (updated.remainingUses === 0) await tx.customerPackage.update({ where: { id: membership.id }, data: { status: "EXHAUSTED" } });
+}
+
+export async function restorePackageUsageForBooking(tx: Prisma.TransactionClient, tenantId: string, bookingId: string) {
+  const usage = await tx.packageUsage.findFirst({
+    where: { tenantId, bookingId },
+    include: { customerPackage: { select: { id: true, status: true, expiresAt: true } } },
+  });
+  if (!usage) return false;
+
+  await tx.packageUsage.delete({ where: { id: usage.id } });
+  const expired = Boolean(usage.customerPackage.expiresAt && usage.customerPackage.expiresAt < new Date());
+  const status = usage.customerPackage.status === "CANCELLED" ? "CANCELLED" : expired ? "EXPIRED" : "ACTIVE";
+  await tx.customerPackage.update({
+    where: { id: usage.customerPackage.id },
+    data: { remainingUses: { increment: usage.uses }, status },
+  });
+  return true;
 }
