@@ -188,7 +188,7 @@ export function AppShell({
                 {tenantGroups.map((group) => {
                   const activeGroup = group.items.some((item) => isActive(item.href, item.internal));
                   return (
-                    <details className="nav-group" key={`${group.label}-${pathname}`} defaultOpen={activeGroup}>
+                    <details className="nav-group" key={`${group.label}-${pathname}`} open={activeGroup || undefined}>
                       <summary>
                         <span><strong>{group.label}</strong><small>{group.description}</small></span>
                         <ChevronDown size={15} />
