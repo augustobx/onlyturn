@@ -20,22 +20,25 @@ export default async function AvailabilityPage() {
   return (
     <>
       <div className="page-title">
-        <span className="eyebrow">Motor de disponibilidad</span>
+        <span className="eyebrow">Paso 4 · Disponibilidad</span>
         <h1>Horarios semanales</h1>
         <p className="muted">
-          Definí jornadas por negocio, sede, profesional o recurso. Podés crear varios bloques en el mismo día para horarios partidos.
+          Definí la jornada general y, sólo cuando haga falta, agregá horarios específicos para una sede, profesional o recurso.
         </p>
       </div>
 
-      <section className="grid two-col" style={{ alignItems: "start" }}>
-        <form action={createWeeklyAvailabilityAction} className="card">
+      <section className="availability-layout">
+        <form action={createWeeklyAvailabilityAction} className="card availability-form">
           <div className="section-head">
-            <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}><Plus size={17} /> Nueva disponibilidad</h2>
-            <CalendarClock size={19} />
+            <div>
+              <span className="eyebrow">Nuevo bloque</span>
+              <h2 style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}><Plus size={17} /> Agregar disponibilidad</h2>
+            </div>
+            <CalendarClock size={20} />
           </div>
 
           <div className="field">
-            <label>Aplicar horario a</label>
+            <label>¿A quién aplica este horario?</label>
             <select className="select" name="target" defaultValue="TENANT:">
               <option value="TENANT:">Todo el negocio · {tenant.name}</option>
               <optgroup label="Sucursales">
@@ -48,53 +51,55 @@ export default async function AvailabilityPage() {
                 {resources.map((item) => <option value={`RESOURCE:${item.id}`} key={`r-${item.id}`}>{item.name}</option>)}
               </optgroup>
             </select>
-            <small className="muted">Las reglas más específicas se intersectan con las generales al calcular un turno.</small>
+            <small className="muted">Empezá por “Todo el negocio”. Usá reglas específicas únicamente para excepciones de jornada.</small>
           </div>
 
           <div className="field">
-            <label>Días</label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 8 }}>
+            <label>Días de la semana</label>
+            <div className="weekday-grid">
               {weekdayNames.map((name, index) => (
-                <label key={name} style={{ display: "flex", gap: 7, alignItems: "center", border: "1px solid var(--line)", borderRadius: 10, padding: "9px 10px", fontSize: 12 }}>
-                  <input type="checkbox" name="weekdays" value={index} defaultChecked={index >= 1 && index <= 5} /> {name}
+                <label className="weekday-choice" key={name}>
+                  <input type="checkbox" name="weekdays" value={index} defaultChecked={index >= 1 && index <= 5} />
+                  <span>{name}</span>
                 </label>
               ))}
             </div>
           </div>
 
-          <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div className="field"><label>Desde</label><input className="input" name="startTime" type="time" defaultValue="09:00" required /></div>
-            <div className="field"><label>Hasta</label><input className="input" name="endTime" type="time" defaultValue="18:00" required /></div>
+          <div className="availability-time-grid">
+            <div className="field"><label>Hora de inicio</label><input className="input" name="startTime" type="time" defaultValue="09:00" required /></div>
+            <div className="field"><label>Hora de fin</label><input className="input" name="endTime" type="time" defaultValue="18:00" required /></div>
           </div>
 
-          <details style={{ margin: "10px 0 16px" }}>
-            <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 13 }}>Vigencia opcional</summary>
-            <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10 }}>
+          <details className="availability-validity">
+            <summary>Limitar vigencia por fechas</summary>
+            <p className="muted">Dejalo vacío si este horario se repite todas las semanas sin fecha de finalización.</p>
+            <div className="availability-validity-grid">
               <div className="field"><label>Válido desde</label><input className="input" name="validFrom" type="date" /></div>
               <div className="field"><label>Válido hasta</label><input className="input" name="validUntil" type="date" /></div>
             </div>
           </details>
 
-          <button className="button" style={{ width: "100%" }}><Clock3 size={15} /> Agregar bloque horario</button>
+          <button className="button" style={{ width: "100%" }}><Clock3 size={15} /> Guardar bloque horario</button>
         </form>
 
-        <aside className="card">
-          <div className="section-head"><h2>Cómo funciona</h2></div>
+        <aside className="card availability-explainer">
+          <div className="section-head"><div><span className="eyebrow">Lógica de agenda</span><h2 style={{ marginTop: 5 }}>Cómo se combinan</h2></div></div>
           <div className="option-grid">
-            <div className="option"><span><strong>Negocio</strong><br /><small className="muted">Base general de atención.</small></span></div>
-            <div className="option"><span><strong>Sede</strong><br /><small className="muted">Limita la disponibilidad de una ubicación concreta.</small></span></div>
-            <div className="option"><span><strong>Profesional</strong><br /><small className="muted">Turnos y jornadas individuales.</small></span></div>
-            <div className="option"><span><strong>Recurso</strong><br /><small className="muted">Disponibilidad de salas, canchas, boxes o equipos.</small></span></div>
+            <div className="option"><span><strong>1. Negocio</strong><br /><small className="muted">Es la base general de atención.</small></span></div>
+            <div className="option"><span><strong>2. Sede</strong><br /><small className="muted">Puede acotar el horario de una ubicación.</small></span></div>
+            <div className="option"><span><strong>3. Profesional</strong><br /><small className="muted">Define jornadas individuales cuando son distintas.</small></span></div>
+            <div className="option"><span><strong>4. Recurso</strong><br /><small className="muted">Limita salas, canchas, boxes o equipos.</small></span></div>
           </div>
-          <p className="muted" style={{ fontSize: 12, marginTop: 14 }}>
-            Ejemplo: negocio 09–20, sede Centro 10–19 y profesional Ana 14–18. OnlyTurn ofrecerá únicamente la intersección válida.
+          <p className="muted" style={{ margin: "18px 0 0", lineHeight: 1.65 }}>
+            Ejemplo: negocio 09–20, sede Centro 10–19 y profesional Ana 14–18. OnlyTurn ofrecerá únicamente horarios donde las reglas necesarias coinciden.
           </p>
         </aside>
       </section>
 
       <div className="platform-toolbar">
-        <h2>Reglas activas</h2>
-        <span className="muted" style={{ fontSize: 12 }}>{rules.length} bloque{rules.length === 1 ? "" : "s"} semanal{rules.length === 1 ? "" : "es"}</span>
+        <div><h2>Reglas activas</h2><span className="muted">Revisá la configuración vigente antes de sumar excepciones nuevas.</span></div>
+        <span className="pill">{rules.length} bloque{rules.length === 1 ? "" : "s"}</span>
       </div>
 
       <div className="card table-wrap">
@@ -103,14 +108,14 @@ export default async function AvailabilityPage() {
           <tbody>
             {rules.length ? rules.map((rule) => (
               <tr key={rule.id}>
-                <td><strong>{ownerLabel(rule)}</strong><div className="muted" style={{ fontSize: 11 }}>{rule.ownerType}</div></td>
+                <td><strong>{ownerLabel(rule)}</strong><div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{rule.ownerType}</div></td>
                 <td>{weekdayNames[rule.weekday] ?? rule.weekday}</td>
                 <td><strong>{minuteToTime(rule.startMinute)} — {minuteToTime(rule.endMinute)}</strong></td>
                 <td className="muted">{rule.validFrom ? new Intl.DateTimeFormat("es-AR").format(rule.validFrom) : "Siempre"}{rule.validUntil ? ` → ${new Intl.DateTimeFormat("es-AR").format(rule.validUntil)}` : ""}</td>
                 <td style={{ textAlign: "right" }}>
                   <form action={deleteAvailabilityRuleAction}>
                     <input type="hidden" name="ruleId" value={rule.id} />
-                    <button className="button ghost" aria-label="Eliminar regla" style={{ color: "#b42331", padding: 7 }}><Trash2 size={14} /></button>
+                    <button className="button ghost" aria-label="Eliminar regla" style={{ color: "#b42331", padding: 8 }}><Trash2 size={15} /></button>
                   </form>
                 </td>
               </tr>
