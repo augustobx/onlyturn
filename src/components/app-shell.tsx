@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { logoutAction } from "@/app/actions/auth";
 
 type ModuleHelp = { title: string; purpose: string; steps: string[]; tip?: string };
@@ -67,6 +67,24 @@ export function AppShell({ children, tenantName, userName, superAdmin = false, p
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(pendingRegistrations);
+
+  useEffect(() => { setPendingCount(pendingRegistrations); }, [pendingRegistrations]);
+  useEffect(() => {
+    if (superAdmin) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/tenant/pending-registrations", { cache: "no-store" });
+        if (!response.ok) return;
+        const body = await response.json() as { count?: number };
+        if (active && typeof body.count === "number") setPendingCount(body.count);
+      } catch { /* keep the last known count */ }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 30000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [superAdmin]);
 
   const isActive = (href: string, internal: string) => {
     if (superAdmin && href === "/superadmin") return pathname === "/superadmin";
@@ -79,7 +97,7 @@ export function AppShell({ children, tenantName, userName, superAdmin = false, p
   const currentItem = allItems.find((navItem) => isActive(navItem.href, navItem.internal)) ?? allItems[0];
   const renderLink = ({ href, internal, label, icon: Icon }: NavItem) => {
     const isCustomers = href === "/clientes";
-    return <Link className={isActive(href, internal) ? "active" : undefined} key={href} href={href} onClick={() => setOpen(false)}><Icon size={17} /><span>{label}</span>{!superAdmin && isCustomers && pendingRegistrations > 0 && <strong className="nav-alert-badge" aria-label={`${pendingRegistrations} registros pendientes`}>{pendingRegistrations > 99 ? "99+" : pendingRegistrations}</strong>}</Link>;
+    return <Link className={isActive(href, internal) ? "active" : undefined} key={href} href={href} onClick={() => setOpen(false)}><Icon size={17} /><span>{label}</span>{!superAdmin && isCustomers && pendingCount > 0 && <strong className="nav-alert-badge" aria-label={`${pendingCount} registros pendientes`}>{pendingCount > 99 ? "99+" : pendingCount}</strong>}</Link>;
   };
 
   return <div className={`shell nanolabs-shell ${superAdmin ? "platform-shell" : "tenant-shell"}`}>
@@ -105,7 +123,7 @@ export function AppShell({ children, tenantName, userName, superAdmin = false, p
     </aside>
 
     <main className="main">
-      <header className="topbar"><div className="topbar-title"><button className="mobile-menu" aria-label="Abrir menú" onClick={() => setOpen(true)}><Menu size={20} /></button><div><span>{superAdmin ? "NanoLabs" : currentItem?.label ?? "OnlyTurn"}</span><strong>{tenantName}</strong></div></div><div className="topbar-actions">{!superAdmin && pendingRegistrations > 0 && <Link className="pending-registration-alert" href="/clientes"><BellRing size={16}/><span><strong>{pendingRegistrations}</strong> registro{pendingRegistrations === 1 ? "" : "s"} nuevo{pendingRegistrations === 1 ? "" : "s"}</span></Link>}{currentItem && <button className="module-help-trigger" type="button" onClick={() => setHelpOpen(true)} aria-label={`Ayuda de ${currentItem.label}`}><CircleHelp size={17} /><span>Ayuda</span></button>}<span className="system-status"><i /> Operativo</span></div></header>
+      <header className="topbar"><div className="topbar-title"><button className="mobile-menu" aria-label="Abrir menú" onClick={() => setOpen(true)}><Menu size={20} /></button><div><span>{superAdmin ? "NanoLabs" : currentItem?.label ?? "OnlyTurn"}</span><strong>{tenantName}</strong></div></div><div className="topbar-actions">{!superAdmin && pendingCount > 0 && <Link className="pending-registration-alert" href="/clientes" aria-live="polite"><BellRing size={16}/><span><strong>{pendingCount}</strong> registro{pendingCount === 1 ? "" : "s"} nuevo{pendingCount === 1 ? "" : "s"}</span></Link>}{currentItem && <button className="module-help-trigger" type="button" onClick={() => setHelpOpen(true)} aria-label={`Ayuda de ${currentItem.label}`}><CircleHelp size={17} /><span>Ayuda</span></button>}<span className="system-status"><i /> Operativo</span></div></header>
       <div className="content">{children}</div>
     </main>
 
