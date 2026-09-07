@@ -12,6 +12,14 @@ type CustomField = {
   required: boolean;
   options: unknown;
 };
+type Addon = {
+  id: string;
+  name: string;
+  description: string | null;
+  priceCents: number;
+  durationMinutes: number;
+  preparationMinutes: number;
+};
 type Service = {
   id: string;
   name: string;
@@ -34,6 +42,7 @@ type Service = {
   locations: { locationId: string }[];
   professionals: { professional: { id: string; name: string } }[];
   resources: { resource: { id: string; name: string; type: string | null } }[];
+  addons: Addon[];
   customFields: CustomField[];
 };
 type SessionOption = {
@@ -83,6 +92,7 @@ export function BookingWizard({
   const [serviceId, setServiceId] = useState("");
   const [professionalId, setProfessional] = useState("");
   const [resourceId, setResource] = useState("");
+  const [addonIds, setAddonIds] = useState<string[]>([]);
   const [date, setDate] = useState(() => isoDate(new Date(Date.now() + 86_400_000)));
   const [weekStart, setWeekStart] = useState(() => isoDate(new Date()));
   const [slot, setSlot] = useState("");
@@ -106,6 +116,10 @@ export function BookingWizard({
   const service = useMemo(() => locationServices.find((item) => item.id === serviceId), [locationServices, serviceId]);
   const isSessionType = service?.bookingType === "CLASS" || service?.bookingType === "EVENT";
   const selectedSession = useMemo(() => sessions.find((item) => item.id === sessionId), [sessions, sessionId]);
+  const selectedAddons = useMemo(() => service?.addons.filter((addon) => addonIds.includes(addon.id)) ?? [], [addonIds, service]);
+  const addonKey = useMemo(() => [...addonIds].sort().join(","), [addonIds]);
+  const addonPriceCents = selectedAddons.reduce((sum, addon) => sum + addon.priceCents, 0);
+  const addonDuration = selectedAddons.reduce((sum, addon) => sum + addon.durationMinutes, 0);
   const categories = useMemo(() => [...new Set(locationServices.map((item) => item.category || "General"))], [locationServices]);
   const paymentPolicy = (service?.depositPolicy ?? {}) as { enabled?: boolean; mode?: "DEPOSIT" | "FULL"; percent?: number };
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addUtcDays(weekStart, index)), [weekStart]);
@@ -138,6 +152,7 @@ export function BookingWizard({
         date,
         ...(professionalId ? { professionalId } : {}),
         ...(resourceId ? { resourceId } : {}),
+        ...(addonKey ? { addons: addonKey } : {}),
       });
       try {
         const response = await fetch(`/api/public/${slug}/availability?${qs}`, { signal: controller.signal });
@@ -152,7 +167,7 @@ export function BookingWizard({
     }
     void loadTimedSlots();
     return () => controller.abort();
-  }, [assignmentReady, date, isSessionType, locationId, professionalId, resourceId, serviceId, slug]);
+  }, [addonKey, assignmentReady, date, isSessionType, locationId, professionalId, resourceId, serviceId, slug]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -189,6 +204,7 @@ export function BookingWizard({
     setSessionId("");
     setProfessional("");
     setResource("");
+    setAddonIds([]);
     if (!services.find((item) => item.id === serviceId)?.locations.some((link) => link.locationId === id)) setServiceId("");
     glideTo(serviceRef);
   }
@@ -199,10 +215,16 @@ export function BookingWizard({
     setServiceId(id);
     setProfessional(!sessionBased && next?.professionalMode === "REQUIRED" ? next.professionals[0]?.professional.id ?? "" : "");
     setResource(!sessionBased && next?.resourceMode === "REQUIRED" ? next.resources[0]?.resource.id ?? "" : "");
+    setAddonIds([]);
     setPartySize(next?.minPartySize ?? 1);
     setSlot("");
     setSessionId("");
     glideTo(timeRef);
+  }
+
+  function toggleAddon(id: string) {
+    setAddonIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+    setSlot("");
   }
 
   function chooseSlot(value: string) {
@@ -239,6 +261,7 @@ export function BookingWizard({
           resourceId: !isSessionType && resourceId ? resourceId : undefined,
           sessionId: isSessionType ? sessionId : undefined,
           startsAt: !isSessionType ? slot : undefined,
+          addonIds,
           partySize,
           firstName: formData.get("firstName"),
           lastName: formData.get("lastName"),
@@ -269,7 +292,8 @@ export function BookingWizard({
   }
 
   const selectedDate = isSessionType ? selectedSession?.startsAt : slot;
-  const paymentTotal = service?.priceCents ? (service.priceCents / 100) * partySize * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100) : 0;
+  const totalPriceCents = (service?.priceCents ?? 0) * partySize + addonPriceCents;
+  const paymentTotal = (totalPriceCents / 100) * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100);
 
   return (
     <div className="booking-flow">
@@ -299,7 +323,7 @@ export function BookingWizard({
                 <span>
                   <small style={{ textTransform: "uppercase", letterSpacing: ".05em" }}>{category} · {bookingTypeLabel[item.bookingType]}</small>
                   <strong>{item.name}</strong>
-                  <small>{item.durationMinutes} min{item.maxPartySize > 1 ? ` · hasta ${item.maxPartySize} personas` : ""}</small>
+                  <small>{item.durationMinutes} min{item.maxPartySize > 1 ? ` · hasta ${item.maxPartySize} personas` : ""}{item.addons.length ? ` · ${item.addons.length} extras` : ""}</small>
                   {item.description && <small>{item.description}</small>}
                   {policy.enabled && <em>{policy.mode === "FULL" ? "Pago online" : `Seña online ${policy.percent ?? 30}%`}</em>}
                 </span>
@@ -331,12 +355,34 @@ export function BookingWizard({
             )}
           </div>
         )}
+
+        {service?.addons.length ? (
+          <div style={{ marginTop: 18 }}>
+            <div className="section-head"><h3 style={{ margin: 0 }}>¿Querés agregar algo?</h3><span className="muted" style={{ fontSize: 11 }}>Opcional</span></div>
+            <div className="option-grid">
+              {service.addons.map((addon) => {
+                const selected = addonIds.includes(addon.id);
+                return (
+                  <label className={`option ${selected ? "active" : ""}`} key={addon.id} style={{ cursor: "pointer" }}>
+                    <span>
+                      <strong>{addon.name}</strong>
+                      {addon.description && <><br /><small className="muted">{addon.description}</small></>}
+                      <br /><small className="muted">{addon.durationMinutes ? `+${addon.durationMinutes} min · ` : ""}{money.format(addon.priceCents / 100)}</small>
+                    </span>
+                    <input type="checkbox" checked={selected} onChange={() => toggleAddon(addon.id)} />
+                  </label>
+                );
+              })}
+            </div>
+            {selectedAddons.length > 0 && <p className="muted" style={{ fontSize: 12 }}>Extras: {money.format(addonPriceCents / 100)}{!isSessionType && addonDuration ? ` · +${addonDuration} min` : ""}</p>}
+          </div>
+        ) : null}
       </section>
 
       <section className={`booking-time card guided-section ${service ? "ready" : "locked"}`} ref={timeRef}>
         <div className="booking-section-title">
           <span className="selection-number">2</span>
-          <div><h2>{isSessionType ? "Elegí una sesión" : "Fecha y hora"}</h2><p className="muted">{isSessionType ? "Mostramos las próximas fechas con cupo disponible." : "Sólo mostramos horarios que cumplen todas las reglas de agenda."}</p></div>
+          <div><h2>{isSessionType ? "Elegí una sesión" : "Fecha y hora"}</h2><p className="muted">{isSessionType ? "Mostramos las próximas fechas con cupo disponible." : "Sólo mostramos horarios que cumplen todas las reglas de agenda y extras elegidos."}</p></div>
         </div>
 
         {isSessionType ? (
@@ -424,15 +470,23 @@ export function BookingWizard({
             {service.customFields.map((field) => <DynamicField key={field.id} field={field} />)}
             <p className="muted booking-policy">{cancellationHours > 0 ? `Solicitá cancelaciones o cambios con al menos ${cancellationHours} horas de anticipación.` : "Consultá al negocio por cancelaciones o cambios."}</p>
 
-            {paymentPolicy.enabled && service.priceCents && (
+            {(service.priceCents != null || addonPriceCents > 0) && (
               <div className="payment-callout">
-                <strong>{paymentPolicy.mode === "FULL" ? "Pago total" : "Seña para confirmar"}</strong>
-                <span>{money.format(paymentTotal)}</span>
-                <small>{partySize > 1 ? `${partySize} asistentes · ` : ""}Serás redirigido a Mercado Pago para confirmar.</small>
+                <strong>Total de la reserva</strong>
+                <span>{money.format(totalPriceCents / 100)}</span>
+                {selectedAddons.length > 0 && <small>Incluye {selectedAddons.length} extra{selectedAddons.length === 1 ? "" : "s"}.</small>}
               </div>
             )}
 
-            <button className="button confirm-booking" disabled={pending}>{pending ? "Procesando…" : paymentPolicy.enabled ? "Reservar y pagar con Mercado Pago" : `Confirmar ${service.bookingType === "CLASS" ? "clase" : service.bookingType === "EVENT" ? "evento" : "reserva"}`}</button>
+            {paymentPolicy.enabled && totalPriceCents > 0 && (
+              <div className="payment-callout">
+                <strong>{paymentPolicy.mode === "FULL" ? "Pago total para confirmar" : "Seña para confirmar"}</strong>
+                <span>{money.format(paymentTotal)}</span>
+                <small>{partySize > 1 ? `${partySize} asistentes · ` : ""}Serás redirigido a Mercado Pago.</small>
+              </div>
+            )}
+
+            <button className="button confirm-booking" disabled={pending}>{pending ? "Procesando…" : paymentPolicy.enabled && totalPriceCents > 0 ? "Reservar y pagar con Mercado Pago" : `Confirmar ${service.bookingType === "CLASS" ? "clase" : service.bookingType === "EVENT" ? "evento" : "reserva"}`}</button>
           </form>
         )}
       </section>
