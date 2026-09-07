@@ -2,6 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { platformDb } from "./db";
 import { isPlatformHostname, normalizeHostname, tenantSlugFromHostname } from "./hostnames";
+import { reconcileTenantMembership } from "./membership";
 
 export type TenantContext = {
   id: string;
@@ -93,6 +94,14 @@ export async function findTenantOwnership(rawHostname: string): Promise<TenantCo
         };
       }
     }
+  }
+
+  // El ownership se conserva aunque la membresía venza, pero el estado operativo
+  // se concilia aquí para que tanto el router como la experiencia pública respeten
+  // la suspensión sin esperar un nuevo login administrativo.
+  if (result && ["ACTIVE", "TRIAL"].includes(result.status)) {
+    const membership = await reconcileTenantMembership(result.id);
+    if (membership && !membership.allowed) result = { ...result, status: "SUSPENDED" };
   }
 
   if (cache.size >= 1000) cache.clear();
