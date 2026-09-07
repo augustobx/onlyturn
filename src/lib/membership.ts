@@ -105,3 +105,21 @@ export async function reconcileTenantMembership(tenantId: string, now = new Date
 
   return { ...state, allowed: false, tenantStatus: "SUSPENDED", subscriptionStatus: state.subscriptionId ? "PAST_DUE" : null };
 }
+
+export async function reconcileExpiredMemberships(now = new Date()) {
+  const tenants = await platformDb.tenant.findMany({
+    where: { status: { in: ["ACTIVE", "TRIAL"] }, archivedAt: null },
+    select: { id: true },
+  });
+
+  let suspended = 0;
+  for (const tenant of tenants) {
+    const state = await getTenantMembershipAccess(tenant.id, now);
+    if (state && !state.allowed && state.reason !== "TENANT_BLOCKED") {
+      await reconcileTenantMembership(tenant.id, now);
+      suspended += 1;
+    }
+  }
+
+  return { checked: tenants.length, suspended };
+}
