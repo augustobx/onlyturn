@@ -31,7 +31,7 @@ PostgreSQL nunca publica un puerto al host.
 
 El wildcard `*.nanoapps.ar` pertenece al `nanoapps-router` central, no directamente a OnlyTurn. El router conserva `Host` / `X-Forwarded-Host`, consulta `/api/internal/caddy/ask?domain=<hostname>` y envía la petición al SaaS que declara ownership del slug.
 
-OnlyTurn debe devolver `204` únicamente para tenants activos o en trial que existan en su propia base, y `404` para hostnames que no le pertenecen.
+OnlyTurn conserva ownership de todo tenant existente que no esté archivado, incluso si está suspendido o cancelado. Así el dominio continúa resolviendo hacia OnlyTurn y puede mostrar `/suspendido`. Solamente un slug inexistente o archivado devuelve `404` para que el router pueda consultar otro SaaS.
 
 ## Deploy
 
@@ -73,11 +73,13 @@ Como mínimo:
 
 - contenedores healthy;
 - `/api/health` en estado `ok`;
-- login SuperAdmin por `onlyturn.nanoapps.ar`;
-- login tenant cuando exista uno;
+- login SuperAdmin por `onlyturn.nanoapps.ar/superadmin/login`;
+- login tenant por `<slug>.nanoapps.ar/login`;
+- panel tenant por `<slug>.nanoapps.ar/dashboard`;
 - alta de tenant desde SuperAdmin;
 - `/api/internal/caddy/ask?domain=<slug>.nanoapps.ar` responde `204` para un tenant OnlyTurn real;
-- el mismo endpoint responde `404` para un slug que no pertenece a OnlyTurn;
+- un tenant suspendido sigue respondiendo `204` y muestra `/suspendido`;
+- el endpoint responde `404` para un slug inexistente o archivado;
 - reserva pública por `<slug>.nanoapps.ar` a través de `nanoapps-router`.
 
 Cuando existan clientes reales, incorporar el backup de PostgreSQL a la política central de backups de NanoLabs antes de cada cambio de schema con riesgo.
