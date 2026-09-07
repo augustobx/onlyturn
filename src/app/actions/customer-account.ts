@@ -55,7 +55,7 @@ export async function loginCustomerAction(_: CustomerAuthState, formData: FormDa
   if (!tenant) return { error: "Agenda no disponible." };
   const account = await platformDb.customerAccount.findUnique({ where: { tenantId_normalizedEmail: { tenantId: tenant.id, normalizedEmail: normalizeEmail(parsed.data.email)! } } });
   if (!account || !await argon2.verify(account.passwordHash, parsed.data.password)) return { error: "Email o contraseña incorrectos." };
-  if (account.status === "PENDING") return { error: "Tu cuenta todavía está esperando aprobación." };
+  if (account.status === "PENDING") redirect("/cuenta?registered=pending");
   if (account.status !== "ACTIVE") return { error: "Tu cuenta no está habilitada. Contactá al negocio." };
   await createCustomerSession(account.id, tenant.id);
   await platformDb.customerAccount.update({ where: { id: account.id }, data: { lastLoginAt: new Date() } });

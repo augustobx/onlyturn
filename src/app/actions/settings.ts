@@ -35,7 +35,11 @@ function refreshSettings(slug?: string) {
   revalidatePath("/configuracion");
   revalidatePath("/app/configurar");
   revalidatePath("/configurar");
-  if (slug) revalidatePath(`/r/${slug}`);
+  if (slug) {
+    revalidatePath(`/r/${slug}`);
+    revalidatePath(`/r/${slug}/registro`);
+    revalidatePath(`/r/${slug}/cuenta`);
+  }
 }
 
 export async function updateSettingsAction(formData: FormData) {
@@ -60,9 +64,24 @@ export async function updateSettingsAction(formData: FormData) {
 
 export async function updateCustomerAccessSettingsAction(formData: FormData) {
   const { session, membership, tenant } = await authorize();
+  const input = z.object({
+    customerAccessTitle: z.string().trim().min(3).max(120).optional(),
+    customerAccessMessage: z.string().trim().min(10).max(700).optional(),
+    customerPendingTitle: z.string().trim().min(3).max(120).optional(),
+    customerPendingMessage: z.string().trim().min(10).max(700).optional(),
+  }).parse(Object.fromEntries(formData));
   const currentSettings = tenant.settings as Record<string, unknown>;
+  const text = (key: string, fallback: string) => typeof currentSettings[key] === "string" && String(currentSettings[key]).trim() ? String(currentSettings[key]) : fallback;
   await createTenantDb(membership.tenantId).updateSettings({
-    settings: { ...currentSettings, customerRegistrationEnabled: formData.get("customerRegistrationEnabled") === "on", customerApprovalRequired: formData.get("customerApprovalRequired") === "on" },
+    settings: {
+      ...currentSettings,
+      customerRegistrationEnabled: formData.get("customerRegistrationEnabled") === "on",
+      customerApprovalRequired: formData.get("customerApprovalRequired") === "on",
+      customerAccessTitle: input.customerAccessTitle ?? text("customerAccessTitle", "Para acceder a nuestros servicios necesitás una cuenta"),
+      customerAccessMessage: input.customerAccessMessage ?? text("customerAccessMessage", "Registrate una sola vez. Después vas a poder ver los servicios disponibles, reservar horarios y administrar tus turnos desde tu cuenta."),
+      customerPendingTitle: input.customerPendingTitle ?? text("customerPendingTitle", "Tu cuenta está en verificación"),
+      customerPendingMessage: input.customerPendingMessage ?? text("customerPendingMessage", `Recibimos tu registro correctamente. El equipo de ${tenant.name} va a revisar tus datos y, en breve, tu cuenta quedará habilitada para acceder a los servicios y gestionar tus reservas.`),
+    },
     branding: tenant.branding as Prisma.InputJsonObject,
   }, session.userId);
   refreshSettings(tenant.slug);
@@ -261,6 +280,8 @@ export async function createCustomDomainAction(formData: FormData) {
 
 export async function deleteCustomDomainAction(formData: FormData) {
   const { session, membership } = await authorize();
+  const features = await effectiveFeatures(membership.tenantId);
+  if (!features.customDomain) throw new Error("Tu plan actual no incluye dominio propio");
   const id = z.string().min(1).parse(formData.get("id"));
   await createTenantDb(membership.tenantId).deleteCustomDomain(id, session.userId);
   clearTenantResolutionCache();

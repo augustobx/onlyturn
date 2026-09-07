@@ -15,6 +15,7 @@ async function authorize() {
 }
 
 function refreshCustomer(customerId: string) {
+  revalidatePath("/app", "layout");
   revalidatePath("/app/clientes");
   revalidatePath(`/app/clientes/${customerId}`);
   revalidatePath("/clientes");

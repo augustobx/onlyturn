@@ -39,8 +39,15 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
   const customerPackages = customerSession ? await getCustomerUsablePackages(tenant.id, customerSession.account.customerId) : [];
   const branding = tenant.branding as PublicBranding;
   const publicTheme = resolvePublicTheme(branding);
-  const settings = tenant.settings as { cancellationHours?: number; customerRegistrationEnabled?: boolean };
+  const settings = tenant.settings as {
+    cancellationHours?: number;
+    customerRegistrationEnabled?: boolean;
+    customerAccessTitle?: string;
+    customerAccessMessage?: string;
+  };
   const registrationRequired = Boolean(settings.customerRegistrationEnabled && !customerSession);
+  const accessTitle = settings.customerAccessTitle?.trim() || "Para acceder a nuestros servicios necesitás una cuenta";
+  const accessMessage = settings.customerAccessMessage?.trim() || "Registrate una sola vez. Después vas a poder ver los servicios disponibles, reservar horarios y administrar tus turnos desde tu cuenta.";
 
   return <main
     className="booking-page booking-page-v2"
@@ -75,8 +82,8 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
           <h2>Te damos la bienvenida a {tenant.name}</h2>
           <p className="registration-welcome-description">{branding.description ?? `Desde acá vas a poder conocer los servicios disponibles de ${tenant.name}, consultar horarios y gestionar tus reservas.`}</p>
           <div className="registration-welcome-notice">
-            <strong>Para acceder a los servicios necesitás una cuenta.</strong>
-            <span>Registrate una sola vez y después vas a poder reservar, consultar tus turnos y administrar tu información desde la PWA.</span>
+            <strong>{accessTitle}</strong>
+            <span>{accessMessage}</span>
           </div>
           <div className="registration-welcome-actions">
             <a className="button registration-primary" href="/registro">Crear mi cuenta</a>
