@@ -9,8 +9,17 @@ import { assertPlanCapacity } from "@/lib/plans";
 import {
   archiveUniversalService,
   createUniversalService,
+  restoreUniversalService,
   updateUniversalService,
 } from "@/lib/service-catalog";
+import {
+  setLocationActive,
+  setProfessionalActive,
+  setResourceActive,
+  updateLocation,
+  updateProfessional,
+  updateResource,
+} from "@/lib/structure-management";
 
 const authorize = async () => {
   const context = await requireTenantSession();
@@ -84,8 +93,34 @@ function refreshCatalog() {
   revalidatePath("/estructura");
   revalidatePath("/app/configurar");
   revalidatePath("/configurar");
+  revalidatePath("/app/disponibilidad");
+  revalidatePath("/disponibilidad");
+  revalidatePath("/app/configuracion");
+  revalidatePath("/configuracion");
   revalidatePath("/");
 }
+
+const locationSchema = z.object({
+  locationId: z.string().min(1),
+  name: z.string().trim().min(2).max(100),
+  address: z.string().trim().max(180).optional(),
+});
+
+const professionalSchema = z.object({
+  professionalId: z.string().min(1),
+  name: z.string().trim().min(2).max(100),
+  locationId: z.string().optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+});
+
+const resourceSchema = z.object({
+  resourceId: z.string().min(1),
+  name: z.string().trim().min(2).max(100),
+  locationId: z.string().optional(),
+  type: z.string().trim().max(80).optional(),
+  capacity: z.coerce.number().int().min(1).max(1000),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+});
 
 export async function createLocationAction(formData: FormData) {
   const { membership } = await authorize();
@@ -95,6 +130,20 @@ export async function createLocationAction(formData: FormData) {
     address: z.string().trim().max(180).optional(),
   }).parse(Object.fromEntries(formData));
   await createTenantDb(membership.tenantId).createLocation({ ...input, slug: slugify(input.name) });
+  refreshCatalog();
+}
+
+export async function updateLocationAction(formData: FormData) {
+  const { membership, session } = await authorize();
+  const input = locationSchema.parse(Object.fromEntries(formData));
+  await updateLocation(membership.tenantId, input.locationId, { name: input.name, address: input.address || undefined }, session.userId);
+  refreshCatalog();
+}
+
+export async function setLocationActiveAction(formData: FormData) {
+  const { membership, session } = await authorize();
+  const input = z.object({ locationId: z.string().min(1), active: z.enum(["true", "false"]) }).parse(Object.fromEntries(formData));
+  await setLocationActive(membership.tenantId, input.locationId, input.active === "true", session.userId);
   refreshCatalog();
 }
 
@@ -110,6 +159,20 @@ export async function createProfessionalAction(formData: FormData) {
   refreshCatalog();
 }
 
+export async function updateProfessionalAction(formData: FormData) {
+  const { membership, session } = await authorize();
+  const input = professionalSchema.parse(Object.fromEntries(formData));
+  await updateProfessional(membership.tenantId, input.professionalId, { name: input.name, locationId: input.locationId || undefined, color: input.color }, session.userId);
+  refreshCatalog();
+}
+
+export async function setProfessionalActiveAction(formData: FormData) {
+  const { membership, session } = await authorize();
+  const input = z.object({ professionalId: z.string().min(1), active: z.enum(["true", "false"]) }).parse(Object.fromEntries(formData));
+  await setProfessionalActive(membership.tenantId, input.professionalId, input.active === "true", session.userId);
+  refreshCatalog();
+}
+
 export async function createResourceAction(formData: FormData) {
   const { membership } = await authorize();
   await assertPlanCapacity(membership.tenantId, "resources");
@@ -121,6 +184,20 @@ export async function createResourceAction(formData: FormData) {
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   }).parse(Object.fromEntries(formData));
   await createTenantDb(membership.tenantId).createResource({ ...input, locationId: input.locationId || undefined });
+  refreshCatalog();
+}
+
+export async function updateResourceAction(formData: FormData) {
+  const { membership, session } = await authorize();
+  const input = resourceSchema.parse(Object.fromEntries(formData));
+  await updateResource(membership.tenantId, input.resourceId, { name: input.name, locationId: input.locationId || undefined, type: input.type || undefined, capacity: input.capacity, color: input.color }, session.userId);
+  refreshCatalog();
+}
+
+export async function setResourceActiveAction(formData: FormData) {
+  const { membership, session } = await authorize();
+  const input = z.object({ resourceId: z.string().min(1), active: z.enum(["true", "false"]) }).parse(Object.fromEntries(formData));
+  await setResourceActive(membership.tenantId, input.resourceId, input.active === "true", session.userId);
   refreshCatalog();
 }
 
@@ -143,5 +220,12 @@ export async function archiveServiceAction(formData: FormData) {
   const { membership, session } = await authorize();
   const input = z.object({ serviceId: z.string().min(1) }).parse(Object.fromEntries(formData));
   await archiveUniversalService(membership.tenantId, input.serviceId, session.userId);
+  refreshCatalog();
+}
+
+export async function restoreServiceAction(formData: FormData) {
+  const { membership, session } = await authorize();
+  const input = z.object({ serviceId: z.string().min(1) }).parse(Object.fromEntries(formData));
+  await restoreUniversalService(membership.tenantId, input.serviceId, session.userId);
   refreshCatalog();
 }
