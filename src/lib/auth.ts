@@ -4,8 +4,9 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { platformDb } from "./db";
 import { randomToken, sha256 } from "./security";
-import { findTenantOwnership, getRequestHostname, tenantHasOperationalAccess } from "./tenant-context";
+import { findTenantOwnership, getRequestHostname } from "./tenant-context";
 import { isPlatformHostname } from "./hostnames";
+import { reconcileTenantMembership } from "./membership";
 
 const COOKIE_NAME = "ot_session";
 const SESSION_DAYS = 14;
@@ -64,11 +65,12 @@ export async function requireTenantSession() {
   const requestTenant = await findTenantOwnership(hostname);
 
   if (!requestTenant || requestTenant.isPlatform) redirect("/login");
-  if (!tenantHasOperationalAccess(requestTenant)) redirect("/suspendido");
+
+  const access = await reconcileTenantMembership(requestTenant.id);
+  if (!access?.allowed) redirect("/suspendido");
 
   const session = await getSession();
   if (!session || session.tenantId !== requestTenant.id || !session.tenant) redirect("/login");
-  if (!["ACTIVE", "TRIAL"].includes(session.tenant.status)) redirect("/suspendido");
 
   const membership = await platformDb.membership.findUnique({
     where: { tenantId_userId: { tenantId: requestTenant.id, userId: session.userId } },
