@@ -10,6 +10,7 @@ export type TenantContext = {
   hostname: string;
   timezone: string;
   currency: string;
+  status: string;
   isPlatform?: boolean;
 };
 
@@ -45,6 +46,7 @@ export async function findTenantOwnership(rawHostname: string): Promise<TenantCo
       hostname,
       timezone: "America/Argentina/Buenos_Aires",
       currency: "ARS",
+      status: "ACTIVE",
       isPlatform: true,
     };
   }
@@ -60,11 +62,7 @@ export async function findTenantOwnership(rawHostname: string): Promise<TenantCo
     include: { tenant: true },
   });
 
-  if (
-    customDomain?.verifiedAt &&
-    ["ACTIVE", "TRIAL"].includes(customDomain.tenant.status) &&
-    !customDomain.tenant.archivedAt
-  ) {
+  if (customDomain?.verifiedAt && !customDomain.tenant.archivedAt) {
     result = {
       id: customDomain.tenant.id,
       slug: customDomain.tenant.slug,
@@ -72,6 +70,7 @@ export async function findTenantOwnership(rawHostname: string): Promise<TenantCo
       hostname,
       timezone: customDomain.tenant.timezone,
       currency: customDomain.tenant.currency,
+      status: customDomain.tenant.status,
     };
   }
 
@@ -79,7 +78,7 @@ export async function findTenantOwnership(rawHostname: string): Promise<TenantCo
     const slug = tenantSlugFromHostname(hostname);
     if (slug) {
       const tenant = await platformDb.tenant.findFirst({
-        where: { slug, status: { in: ["ACTIVE", "TRIAL"] }, archivedAt: null },
+        where: { slug, archivedAt: null },
       });
 
       if (tenant) {
@@ -90,6 +89,7 @@ export async function findTenantOwnership(rawHostname: string): Promise<TenantCo
           hostname,
           timezone: tenant.timezone,
           currency: tenant.currency,
+          status: tenant.status,
         };
       }
     }
@@ -103,6 +103,10 @@ export async function findTenantOwnership(rawHostname: string): Promise<TenantCo
   });
 
   return result;
+}
+
+export function tenantHasOperationalAccess(tenant: Pick<TenantContext, "status">): boolean {
+  return tenant.status === "ACTIVE" || tenant.status === "TRIAL";
 }
 
 export function clearTenantResolutionCache() {
