@@ -5,6 +5,7 @@ const PUBLIC_TENANT_PATHS = new Set(["/", "/cuenta", "/mi-cuenta", "/registro", 
 const TENANT_ADMIN_PREFIXES = [
   "/agenda",
   "/clientes",
+  "/configurar",
   "/configuracion",
   "/apariencia",
   "/disponibilidad",
