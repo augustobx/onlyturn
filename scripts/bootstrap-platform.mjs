@@ -3,6 +3,8 @@ import argon2 from "argon2";
 
 const db = new PrismaClient();
 
+// Feature flags reflect capabilities that are actually production-ready today.
+// Future modules stay disabled until their end-to-end flow exists.
 const defaultFeatures = {
   BASIC: {
     maxLocations: 1,
@@ -21,33 +23,33 @@ const defaultFeatures = {
     maxStaff: 15,
     maxResources: 20,
     maxBookings: 2000,
-    whatsappNotifications: true,
-    advancedReports: true,
+    whatsappNotifications: false,
+    advancedReports: false,
     customDomain: false,
-    waitlist: true,
+    waitlist: false,
     deposits: true,
-    recurringBookings: true,
+    recurringBookings: false,
   },
   BUSINESS: {
     maxLocations: 20,
     maxStaff: 100,
     maxResources: 100,
     maxBookings: 20000,
-    whatsappNotifications: true,
-    advancedReports: true,
-    customDomain: true,
-    waitlist: true,
+    whatsappNotifications: false,
+    advancedReports: false,
+    customDomain: false,
+    waitlist: false,
     deposits: true,
-    recurringBookings: true,
+    recurringBookings: false,
   },
 };
 
 async function main() {
-  console.log("[bootstrap] Synchronizing platform plans...");
+  console.log("[bootstrap] Synchronizing OnlyTurn plans...");
   for (const [code, features] of Object.entries(defaultFeatures)) {
     await db.plan.upsert({
       where: { code },
-      update: { features },
+      update: { features, isActive: true },
       create: {
         code,
         name: code[0] + code.slice(1).toLowerCase(),
@@ -64,23 +66,28 @@ async function main() {
   const password = process.env.ONLYTURN_SUPERADMIN_PASSWORD || process.env.SUPERADMIN_PASSWORD || "";
   const name = (process.env.ONLYTURN_SUPERADMIN_NAME || process.env.SUPERADMIN_NAME || "NanoLabs Admin").trim();
 
-  if (email && password.length >= 8) {
-    console.log(`[bootstrap] Ensuring SuperAdmin account for ${email}...`);
-    const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
-    await db.user.upsert({
-      where: { email },
-      update: { name, passwordHash, isSuperAdmin: true, isActive: true },
-      create: { email, name, passwordHash, isSuperAdmin: true, isActive: true },
-    });
-    console.log("[bootstrap] SuperAdmin account synchronized.");
-  } else {
-    console.log("[bootstrap] No SuperAdmin credentials provided in environment. Skipping SuperAdmin upsert.");
+  if (!email && !password) {
+    console.log("[bootstrap] No SuperAdmin credentials provided. Existing accounts are left unchanged.");
+    return;
   }
+
+  if (!email || password.length < 10) {
+    throw new Error("ONLYTURN_SUPERADMIN_EMAIL and a password of at least 10 characters are required together");
+  }
+
+  console.log(`[bootstrap] Ensuring NanoLabs SuperAdmin account for ${email}...`);
+  const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
+  await db.user.upsert({
+    where: { email },
+    update: { name, passwordHash, isSuperAdmin: true, isActive: true },
+    create: { email, name, passwordHash, isSuperAdmin: true, isActive: true },
+  });
+  console.log("[bootstrap] SuperAdmin account synchronized.");
 }
 
 main()
-  .catch((e) => {
-    console.error("[bootstrap] Error during platform bootstrap:", e);
+  .catch((error) => {
+    console.error("[bootstrap] Error during platform bootstrap:", error);
     process.exit(1);
   })
   .finally(() => db.$disconnect());
