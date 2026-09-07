@@ -1,36 +1,69 @@
 import "server-only";
+import { z } from "zod";
 import { platformDb } from "./db";
 
-export type PlanFeatures = {
-  maxLocations: number; maxStaff: number; maxResources: number; maxBookings: number;
-  whatsappNotifications: boolean; advancedReports: boolean; customDomain: boolean;
-  waitlist: boolean; deposits: boolean; recurringBookings: boolean;
-};
+const planFeaturesSchema = z.object({
+  maxLocations: z.number().int().positive(),
+  maxStaff: z.number().int().positive(),
+  maxResources: z.number().int().positive(),
+  maxBookings: z.number().int().positive(),
+  whatsappNotifications: z.boolean(),
+  advancedReports: z.boolean(),
+  customDomain: z.boolean(),
+  waitlist: z.boolean(),
+  deposits: z.boolean(),
+  recurringBookings: z.boolean(),
+}).strict();
+
+export type PlanFeatures = z.infer<typeof planFeaturesSchema>;
 
 export async function effectiveFeatures(tenantId: string): Promise<PlanFeatures> {
   const subscription = await platformDb.subscription.findFirst({
     where: { tenantId, status: { in: ["ACTIVE", "TRIALING"] } },
-    include: { plan: true }, orderBy: { createdAt: "desc" }
+    include: { plan: true },
+    orderBy: { createdAt: "desc" },
   });
-  if (!subscription) throw new Error("Tenant has no active subscription");
-  const features = subscription.plan.features as PlanFeatures;
+  if (!subscription) throw new Error("El tenant no tiene una suscripción activa");
+
+  const features = planFeaturesSchema.parse(subscription.plan.features);
   const overrides = await platformDb.tenantFeatureOverride.findMany({ where: { tenantId } });
-  const result = { ...features } as Record<string, boolean | number>;
+  const result: Record<string, boolean | number> = { ...features };
+
   for (const override of overrides) {
-    if (override.enabled !== null) result[override.key] = override.enabled;
-    if (override.limit !== null) result[override.key] = override.limit;
+    if (!(override.key in features)) continue;
+    const current = result[override.key];
+    if (typeof current === "boolean" && override.enabled !== null) result[override.key] = override.enabled;
+    if (typeof current === "number" && override.limit !== null && override.limit > 0) result[override.key] = override.limit;
   }
-  return result as PlanFeatures;
+
+  return planFeaturesSchema.parse(result);
 }
 
-export async function assertPlanCapacity(tenantId: string, resource: "locations" | "staff" | "resources" | "bookings") {
+export async function assertPlanCapacity(
+  tenantId: string,
+  resource: "locations" | "staff" | "resources" | "bookings",
+) {
   const features = await effectiveFeatures(tenantId);
-  const limits = { locations: features.maxLocations, staff: features.maxStaff, resources: features.maxResources, bookings: features.maxBookings };
+  const limits = {
+    locations: features.maxLocations,
+    staff: features.maxStaff,
+    resources: features.maxResources,
+    bookings: features.maxBookings,
+  };
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
   const counts = {
     locations: () => platformDb.location.count({ where: { tenantId, isActive: true } }),
     staff: () => platformDb.professional.count({ where: { tenantId, isActive: true } }),
     resources: () => platformDb.resource.count({ where: { tenantId, isActive: true } }),
-    bookings: () => platformDb.booking.count({ where: { tenantId, createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) } } })
+    bookings: () => platformDb.booking.count({ where: { tenantId, createdAt: { gte: monthStart } } }),
   };
-  if (await counts[resource]() >= limits[resource]) throw new Error(`Límite del plan alcanzado: ${resource}`);
+
+  const current = await counts[resource]();
+  if (current >= limits[resource]) {
+    const labels = { locations: "sedes", staff: "profesionales", resources: "recursos", bookings: "turnos mensuales" };
+    throw new Error(`Límite del plan alcanzado para ${labels[resource]} (${current}/${limits[resource]})`);
+  }
 }
