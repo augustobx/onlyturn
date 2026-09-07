@@ -13,6 +13,7 @@ import {
 import { requireSuperAdmin } from "@/lib/auth";
 import { platformDb } from "@/lib/db";
 import { tenantPublicUrl } from "@/lib/hostnames";
+import { reconcileExpiredMemberships } from "@/lib/membership";
 
 const statusLabels: Record<string, string> = {
   TRIAL: "Prueba",
@@ -31,6 +32,7 @@ const date = new Intl.DateTimeFormat("es-AR");
 
 export default async function SuperAdminPage() {
   await requireSuperAdmin();
+  await reconcileExpiredMemberships();
 
   const [tenants, plans] = await Promise.all([
     platformDb.tenant.findMany({
