@@ -69,8 +69,8 @@ export async function getUniversalServiceCatalog(tenantId: string) {
       },
       orderBy: [{ category: "asc" }, { name: "asc" }],
     }),
-    platformDb.professional.findMany({ where: { tenantId, isActive: true }, orderBy: { name: "asc" } }),
-    platformDb.resource.findMany({ where: { tenantId, isActive: true }, orderBy: { name: "asc" } }),
+    platformDb.professional.findMany({ where: { tenantId, isActive: true }, include: { location: true }, orderBy: { name: "asc" } }),
+    platformDb.resource.findMany({ where: { tenantId, isActive: true }, include: { location: true }, orderBy: { name: "asc" } }),
   ] as const);
 }
 
@@ -220,7 +220,7 @@ export async function archiveUniversalService(tenantId: string, serviceId: strin
         actorId,
         action: "service.archived",
         entityType: "Service",
-        entityId: serviceId,
+        entityId: service.id,
         metadata: { name: service.name },
       },
     }),
