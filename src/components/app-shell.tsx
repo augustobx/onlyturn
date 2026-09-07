@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  WalletCards,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,7 +35,8 @@ const item = (href: string, internal: string, label: string, icon: NavItem["icon
 
 const tenantItems = {
   dashboard: item("/dashboard", "/app", "Resumen", LayoutDashboard, "Tablero ejecutivo del negocio.", ["Revisá actividad y reservas.", "Detectá cancelaciones y no-shows.", "Entrá al módulo que necesite atención."]),
-  agenda: item("/agenda", "/app/agenda", "Agenda", CalendarDays, "Centraliza los turnos y reservas operativas.", ["Filtrá por fecha o asignación.", "Creá turnos manuales.", "Confirmá, reprogramá o cerrá reservas."]),
+  agenda: item("/agenda", "/app/agenda", "Agenda", CalendarDays, "Centraliza turnos ocupados y huecos libres calculados con la disponibilidad real.", ["Elegí servicio y sede para calcular disponibilidad.", "Usá los huecos verdes para crear turnos sin adivinar horarios.", "Abrí una reserva para actualizar estado, reprogramar o ir al cobro."], "La disponibilidad depende del servicio. OnlyTurn cruza horario, profesional, recurso, bloqueos y reservas existentes."),
+  caja: item("/caja", "/app/caja", "Caja / Cobros", WalletCards, "Centraliza lo cobrado, lo pendiente y los pagos vinculados a cada turno.", ["Revisá qué reservas tienen saldo pendiente.", "Registrá efectivo, transferencia, tarjeta u otros medios.", "Controlá los cobros recientes y su origen."], "Mercado Pago sigue funcionando como proveedor online; Caja lo presenta junto con los cobros manuales en una sola vista operativa."),
   clientes: item("/clientes", "/app/clientes", "Clientes / CRM", Users, "Ficha, historial, saldo y comportamiento de clientes.", ["Buscá al cliente.", "Abrí su ficha.", "Gestioná historial, saldo y datos."]),
   setup: item("/configurar", "/app/configurar", "Configurar negocio", Settings2, "Centro único para dejar lista la agenda sin saltar entre módulos.", ["Completá el checklist inicial.", "Configurá sedes, equipo, servicios y horarios.", "Después afiná reglas, apariencia e integraciones."], "Usá este módulo para toda la puesta a punto. Las herramientas avanzadas quedan separadas de la configuración."),
   sesiones: item("/sesiones", "/app/sesiones", "Clases y eventos", CalendarRange, "Gestiona sesiones con cupos y varios asistentes.", ["Creá la sesión.", "Definí cupo y asignaciones.", "Controlá inscriptos."]),
@@ -53,7 +55,7 @@ const tenantItems = {
   configuracion: item("/configuracion", "/app/configuracion", "Configuración", Settings2, "Datos generales, formularios, pagos, dominios y opciones avanzadas.", ["Elegí la sección.", "Modificá sólo lo necesario.", "Guardá y verificá el resultado."]),
 };
 
-const primaryTenantLinks = [tenantItems.dashboard, tenantItems.agenda, tenantItems.clientes, tenantItems.setup];
+const primaryTenantLinks = [tenantItems.dashboard, tenantItems.agenda, tenantItems.caja, tenantItems.clientes, tenantItems.setup];
 const advancedTenantLinks = [tenantItems.sesiones, tenantItems.recurrencias, tenantItems.waitlist, tenantItems.extras, tenantItems.paquetes, tenantItems.automatizaciones, tenantItems.calendario, tenantItems.reportes];
 const hiddenSetupItems = [tenantItems.estructura, tenantItems.servicios, tenantItems.disponibilidad, tenantItems.politicas, tenantItems.apariencia, tenantItems.configuracion];
 

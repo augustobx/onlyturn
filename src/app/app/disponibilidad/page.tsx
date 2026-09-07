@@ -1,6 +1,7 @@
 import { CalendarClock, Clock3, Pencil, Plus, RotateCcw, XCircle } from "lucide-react";
 import { requireTenantSession } from "@/lib/auth";
 import { getAvailabilityManagementData } from "@/lib/availability-management";
+import { FeedbackForm } from "@/components/feedback-form";
 import { createWeeklyAvailabilityAction, setAvailabilityRuleActiveAction, updateAvailabilityRuleAction } from "@/app/actions/availability-management";
 
 const weekdayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -37,18 +38,18 @@ export default async function AvailabilityPage() {
     <div className="page-title">
       <span className="eyebrow">Paso 4 · Disponibilidad</span>
       <h1>Horarios semanales</h1>
-      <p className="muted">Definí la jornada general y editá, desactivá o recuperá cualquier bloque cuando cambie la operación.</p>
+      <p className="muted">Definí la jornada general y editá, desactivá o recuperá cualquier bloque. Cada cambio confirma cuando quedó guardado.</p>
     </div>
 
     <section className="availability-layout">
-      <form action={createWeeklyAvailabilityAction} className="card availability-form">
+      <FeedbackForm action={createWeeklyAvailabilityAction} className="card availability-form" savedMessage="Horario agregado">
         <div className="section-head"><div><span className="eyebrow">Nuevo bloque</span><h2 style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}><Plus size={17} /> Agregar disponibilidad</h2></div><CalendarClock size={20} /></div>
         <div className="field"><label>¿A quién aplica este horario?</label><select className="select" name="target" defaultValue="TENANT:">{ownerOptions}</select><small className="muted">Empezá por “Todo el negocio”. Usá reglas específicas únicamente cuando haga falta.</small></div>
         <div className="field"><label>Días de la semana</label><div className="weekday-grid">{weekdayNames.map((name, index) => <label className="weekday-choice" key={name}><input type="checkbox" name="weekdays" value={index} defaultChecked={index >= 1 && index <= 5} /><span>{name}</span></label>)}</div></div>
         <div className="availability-time-grid"><div className="field"><label>Hora de inicio</label><input className="input" name="startTime" type="time" defaultValue="09:00" required /></div><div className="field"><label>Hora de fin</label><input className="input" name="endTime" type="time" defaultValue="18:00" required /></div></div>
         <details className="availability-validity"><summary>Limitar vigencia por fechas</summary><p className="muted">Dejalo vacío si este horario se repite todas las semanas sin fecha de finalización.</p><div className="availability-validity-grid"><div className="field"><label>Válido desde</label><input className="input" name="validFrom" type="date" /></div><div className="field"><label>Válido hasta</label><input className="input" name="validUntil" type="date" /></div></div></details>
-        <button className="button" style={{ width: "100%" }}><Clock3 size={15} /> Guardar bloque horario</button>
-      </form>
+        <button className="button" type="submit" style={{ width: "100%" }}><Clock3 size={15} /> Guardar bloque horario</button>
+      </FeedbackForm>
 
       <aside className="card availability-explainer">
         <div className="section-head"><div><span className="eyebrow">Lógica de agenda</span><h2 style={{ marginTop: 5 }}>Cómo se combinan</h2></div></div>
@@ -66,7 +67,7 @@ export default async function AvailabilityPage() {
           <div className="availability-rule-meta"><span className={`status ${rule.isActive ? "ACTIVE" : "SUSPENDED"}`}>{rule.isActive ? "Activo" : "Inactivo"}</span><span className="muted">{rule.validFrom ? new Intl.DateTimeFormat("es-AR").format(rule.validFrom) : "Siempre"}{rule.validUntil ? ` → ${new Intl.DateTimeFormat("es-AR").format(rule.validUntil)}` : ""}</span></div>
         </summary>
         <div className="availability-rule-editor">
-          <form action={updateAvailabilityRuleAction} className="setup-edit-form">
+          <FeedbackForm action={updateAvailabilityRuleAction} className="setup-edit-form" savedMessage="Horario actualizado">
             <input type="hidden" name="ruleId" value={rule.id} />
             <div className="field"><label>Alcance</label><select className="select" name="target" defaultValue={ownerValue(rule)}>{ownerOptions}</select></div>
             <div className="field"><label>Día</label><select className="select" name="weekday" defaultValue={rule.weekday}>{weekdayNames.map((name, index) => <option value={index} key={name}>{name}</option>)}</select></div>
@@ -74,9 +75,9 @@ export default async function AvailabilityPage() {
             <div className="field"><label>Hasta</label><input className="input" name="endTime" type="time" defaultValue={minuteToTime(rule.endMinute)} required /></div>
             <div className="field"><label>Válido desde</label><input className="input" name="validFrom" type="date" defaultValue={dateInput(rule.validFrom)} /></div>
             <div className="field"><label>Válido hasta</label><input className="input" name="validUntil" type="date" defaultValue={dateInput(rule.validUntil)} /></div>
-            <button className="button secondary"><Pencil size={14} /> Guardar cambios</button>
-          </form>
-          <form action={setAvailabilityRuleActiveAction} className="setup-lifecycle-action"><input type="hidden" name="ruleId" value={rule.id} /><input type="hidden" name="active" value={rule.isActive ? "false" : "true"} /><button className={`button ${rule.isActive ? "ghost danger-action" : "secondary"}`}>{rule.isActive ? <><XCircle size={14} /> Desactivar bloque</> : <><RotateCcw size={14} /> Reactivar bloque</>}</button><small className="muted">La baja conserva la regla y permite recuperarla.</small></form>
+            <button className="button secondary" type="submit"><Pencil size={14} /> Guardar cambios</button>
+          </FeedbackForm>
+          <FeedbackForm action={setAvailabilityRuleActiveAction} className="setup-lifecycle-action" savedMessage={rule.isActive ? "Horario desactivado" : "Horario reactivado"}><input type="hidden" name="ruleId" value={rule.id} /><input type="hidden" name="active" value={rule.isActive ? "false" : "true"} /><button type="submit" className={`button ${rule.isActive ? "ghost danger-action" : "secondary"}`}>{rule.isActive ? <><XCircle size={14} /> Desactivar bloque</> : <><RotateCcw size={14} /> Reactivar bloque</>}</button><small className="muted">La baja conserva la regla y permite recuperarla.</small></FeedbackForm>
         </div>
       </details>) : <div className="card empty">No hay reglas semanales. Agregá la primera para habilitar horarios de reserva.</div>}
     </div>
