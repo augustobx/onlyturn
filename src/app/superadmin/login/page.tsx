@@ -1,4 +1,4 @@
-import { CalendarCheck2, ShieldCheck } from "lucide-react";
+import { Shield } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getRequestHostname } from "@/lib/tenant-context";
@@ -12,16 +12,18 @@ export default async function SuperAdminLoginPage() {
   const session = await getSession();
   if (session?.user.isSuperAdmin && !session.tenantId) redirect("/superadmin");
 
-  return <main className="login-page">
-    <section className="login-visual">
-      <div className="brand brand-onlyturn"><span className="brand-mark"><CalendarCheck2 size={18} /></span><span className="brand-copy"><strong>OnlyTurn</strong><small style={{color:"#bfdbfe"}}>by NanoLabs</small></span></div>
-      <div>
-        <span className="eyebrow">Administración SaaS</span>
-        <h1>Control global de OnlyTurn.</h1>
-        <p>Gestioná tenants, planes, trials, suscripciones y estado operativo desde la consola de plataforma.</p>
-      </div>
-      <small style={{color:"#a9bfdd",display:"flex",alignItems:"center",gap:6}}><ShieldCheck size={14} /> Acceso exclusivo NanoLabs</small>
-    </section>
-    <section className="login-panel"><SuperAdminLoginForm /></section>
-  </main>;
+  return (
+    <main className="sa-login">
+      <section className="sa-login-card">
+        <div className="sa-login-brand">
+          <span className="sa-login-shield"><Shield size={29} /></span>
+          <span className="sa-login-badge">Plataforma NanoLabs</span>
+          <h1>OnlyTurn SuperAdmin</h1>
+          <p>Plano de control y administración SaaS</p>
+        </div>
+        <SuperAdminLoginForm />
+        <div className="sa-login-foot">OnlyTurn · Aislamiento y control SaaS NanoLabs</div>
+      </section>
+    </main>
+  );
 }
