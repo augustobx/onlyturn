@@ -9,6 +9,7 @@ import "./setup-center.css";
 import "./setup-polish.css";
 import "./lifecycle.css";
 import "./product-overhaul.css";
+import "./pwa-smart-booking.css";
 import { PwaRegister } from "@/components/pwa-register";
 
 const baseUrl = process.env.APP_BASE_URL || "https://onlyturn.nanoapps.ar";
