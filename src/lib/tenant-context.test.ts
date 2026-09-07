@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isPlatformHostname, normalizeHostname } from "./tenant-context";
+import { tenantPublicUrl, tenantSlugFromHostname } from "./hostnames";
 
 describe("tenant-context", () => {
   it("normalizes hostnames by stripping ports, trailing dots and casing", () => {
@@ -15,5 +16,12 @@ describe("tenant-context", () => {
     expect(isPlatformHostname("127.0.0.1:3000")).toBe(true);
     expect(isPlatformHostname("centro-demo.nanoapps.ar")).toBe(false);
     expect(isPlatformHostname("turnos.micentro.com")).toBe(false);
+  });
+
+  it("uses the shared NanoApps namespace for tenants", () => {
+    expect(tenantSlugFromHostname("centro-demo.nanoapps.ar")).toBe("centro-demo");
+    expect(tenantSlugFromHostname("onlyturn.nanoapps.ar")).toBeNull();
+    expect(tenantSlugFromHostname("centro.onlyturn.nanoapps.ar")).toBeNull();
+    expect(tenantPublicUrl("centro-demo")).toBe("https://centro-demo.nanoapps.ar");
   });
 });
