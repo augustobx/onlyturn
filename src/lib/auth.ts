@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { platformDb } from "./db";
 import { randomToken, sha256 } from "./security";
+import { findTenantOwnership, getRequestHostname, tenantHasOperationalAccess } from "./tenant-context";
+import { isPlatformHostname } from "./hostnames";
 
 const COOKIE_NAME = "ot_session";
 const SESSION_DAYS = 14;
@@ -58,11 +60,18 @@ export async function requireSession() {
 }
 
 export async function requireTenantSession() {
-  const session = await requireSession();
-  if (!session.tenantId || !session.tenant || !["ACTIVE", "TRIAL"].includes(session.tenant.status)) redirect("/login");
+  const hostname = await getRequestHostname();
+  const requestTenant = await findTenantOwnership(hostname);
+
+  if (!requestTenant || requestTenant.isPlatform) redirect("/login");
+  if (!tenantHasOperationalAccess(requestTenant)) redirect("/suspendido");
+
+  const session = await getSession();
+  if (!session || session.tenantId !== requestTenant.id || !session.tenant) redirect("/login");
+  if (!["ACTIVE", "TRIAL"].includes(session.tenant.status)) redirect("/suspendido");
 
   const membership = await platformDb.membership.findUnique({
-    where: { tenantId_userId: { tenantId: session.tenantId, userId: session.userId } },
+    where: { tenantId_userId: { tenantId: requestTenant.id, userId: session.userId } },
   });
   if (!membership?.isActive) redirect("/login");
 
@@ -70,8 +79,11 @@ export async function requireTenantSession() {
 }
 
 export async function requireSuperAdmin() {
-  const session = await requireSession();
-  if (!session.user.isSuperAdmin) redirect("/app");
+  const hostname = await getRequestHostname();
+  if (!isPlatformHostname(hostname)) redirect("/login");
+
+  const session = await getSession();
+  if (!session || !session.user.isSuperAdmin || session.tenantId) redirect("/superadmin/login");
   return session;
 }
 
