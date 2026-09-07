@@ -111,23 +111,23 @@ export async function createResourceAction(formData: FormData) {
 }
 
 export async function createServiceAction(formData: FormData) {
-  const { membership, user } = await authorize();
+  const { membership, session } = await authorize();
   const { data } = parseServiceForm(formData);
-  await createUniversalService(membership.tenantId, data, user.id);
+  await createUniversalService(membership.tenantId, data, session.userId);
   refreshCatalog();
 }
 
 export async function updateServiceAction(formData: FormData) {
-  const { membership, user } = await authorize();
+  const { membership, session } = await authorize();
   const { serviceId, data } = parseServiceForm(formData);
   if (!serviceId) throw new Error("Servicio requerido");
-  await updateUniversalService(membership.tenantId, serviceId, data, user.id);
+  await updateUniversalService(membership.tenantId, serviceId, data, session.userId);
   refreshCatalog();
 }
 
 export async function archiveServiceAction(formData: FormData) {
-  const { membership, user } = await authorize();
+  const { membership, session } = await authorize();
   const input = z.object({ serviceId: z.string().min(1) }).parse(Object.fromEntries(formData));
-  await archiveUniversalService(membership.tenantId, input.serviceId, user.id);
+  await archiveUniversalService(membership.tenantId, input.serviceId, session.userId);
   refreshCatalog();
 }
