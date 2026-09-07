@@ -21,6 +21,8 @@ function timeToMinute(value: string) {
 function refresh() {
   revalidatePath("/app/disponibilidad");
   revalidatePath("/disponibilidad");
+  revalidatePath("/app/configurar");
+  revalidatePath("/configurar");
 }
 
 export async function createWeeklyAvailabilityAction(formData: FormData) {
