@@ -16,7 +16,7 @@ const labels: Record<string, string> = {
 
 export default async function DashboardPage() {
   const { membership, tenant } = await requireTenantSession();
-  if (!tenant.onboardingDone) redirect("/app/onboarding");
+  if (!tenant.onboardingDone) redirect("/onboarding");
 
   const now = new Date();
   const localDate = new Intl.DateTimeFormat("en-CA", {
@@ -58,7 +58,7 @@ export default async function DashboardPage() {
 
     <section className="grid two-col">
       <div className="card">
-        <div className="section-head"><h2>Próximos turnos</h2><Link className="pill" href="/app/agenda">Ver agenda</Link></div>
+        <div className="section-head"><h2>Próximos turnos</h2><Link className="pill" href="/agenda">Ver agenda</Link></div>
         {upcoming.length ? upcoming.map((booking) => <div className="booking-row" key={booking.id}>
           <div className="time">{new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: tenant.timezone }).format(booking.startsAt)}</div>
           <div><strong><span className="dot" style={{background:booking.service.color}} />{booking.customer.firstName} {booking.customer.lastName}</strong><div className="muted" style={{fontSize:12}}>{booking.service.name} · {booking.professional?.name ?? booking.resource?.name ?? "Sin asignar"}</div></div>
