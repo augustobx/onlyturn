@@ -5,6 +5,7 @@ import { cancelCustomerBookingAction, logoutCustomerAction, updateCustomerProfil
 import { getPublicTenant } from "@/lib/booking-service";
 import { requireCustomerSession } from "@/lib/customer-auth";
 import { platformDb } from "@/lib/db";
+import { publicThemeVariables, type PublicBranding } from "@/lib/public-themes";
 
 const labels = { CHARGE: "Cargo", PAYMENT: "Pago", CREDIT: "Crédito", ADJUSTMENT: "Ajuste" } as const;
 const packageLabels = { ACTIVE: "Activo", EXHAUSTED: "Agotado", EXPIRED: "Vencido", CANCELLED: "Cancelado" } as const;
@@ -33,8 +34,9 @@ export default async function CustomerPortalPage({ params }: { params: Promise<{
   const future = customer.bookings.filter((item) => item.startsAt > now && ["PENDING", "CONFIRMED"].includes(item.status)).length;
   const activePackages = customer.packages.filter((item) => item.status === "ACTIVE" && item.remainingUses > 0 && (!item.expiresAt || item.expiresAt >= now));
   const availableUses = activePackages.reduce((sum, item) => sum + item.remainingUses, 0);
+  const { theme, style } = publicThemeVariables(tenant.branding as PublicBranding);
 
-  return <main className="booking-page customer-portal">
+  return <main className="booking-page booking-page-v2 customer-portal" data-theme={theme.id} data-theme-mode={theme.dark ? "dark" : "light"} style={style as React.CSSProperties}>
     <div className="customer-portal-wrap">
       <header className="customer-portal-head">
         <div><span className="eyebrow">Mi cuenta</span><h1>Hola, {customer.firstName}</h1><p>{tenant.name}</p></div>
