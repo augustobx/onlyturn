@@ -1,36 +1,65 @@
 # Multi-tenancy
 
-El navegador nunca es autoridad para elegir un tenant administrativo. La sesión persistida contiene el tenant activo; el servidor vuelve a cargar membresía, estado del usuario y estado del tenant. En público, el slug/hostname resuelve únicamente tenants activos o en trial y solo se exponen campos publicados.
+OnlyTurn separa estrictamente el plano de plataforma NanoLabs del plano operativo de cada tenant.
 
-## Namespace de hosts
-
-NanoLabs usa un namespace compartido para todos los SaaS:
+## Hosts
 
 ```text
-onlyturn.nanoapps.ar        -> plataforma / SuperAdmin de OnlyTurn
+onlyturn.nanoapps.ar        -> plataforma / SuperAdmin
 <slug>.nanoapps.ar          -> tenant, despachado por nanoapps-router
 ```
 
-El wildcard `*.nanoapps.ar` llega al `nanoapps-router` central. El router consulta el endpoint `/api/internal/caddy/ask?domain=<hostname>` de cada SaaS y reenvía la petición al servicio que responde `204` indicando que ese hostname le pertenece.
+`*.nanoapps.ar` llega al `nanoapps-router` central. El router consulta `/api/internal/caddy/ask?domain=<hostname>` de cada SaaS y reenvía la petición al servicio que responde `204`.
 
-OnlyTurn no decide qué SaaS recibe primero el hostname: únicamente valida si el slug solicitado existe en su propia base y está activo o en trial. Por eso el namespace de slugs debe mantenerse sin colisiones entre productos.
+OnlyTurn devuelve `204` para todo tenant propio no archivado, incluso si está suspendido o cancelado. De ese modo el dominio sigue perteneciendo a OnlyTurn y puede mostrar `/suspendido`. Un slug inexistente o archivado devuelve `404`.
 
-La normalización y extracción de host vive en `src/lib/hostnames.ts`; `src/proxy.ts` reescribe el hostname tenant válido a la experiencia pública correspondiente.
+## Experiencia tenant
 
-Los dominios personalizados se consideran válidos únicamente cuando el registro `CustomDomain` está verificado. Hasta completar el flujo end-to-end de validación/DNS, la feature permanece deshabilitada en los planes productivos.
+La URL visible del cliente nunca depende de `/app` ni de `/r/[slug]`:
+
+```text
+https://<slug>.nanoapps.ar/               reserva pública
+https://<slug>.nanoapps.ar/login          login administrativo
+https://<slug>.nanoapps.ar/dashboard      dashboard tenant
+https://<slug>.nanoapps.ar/agenda         agenda
+https://<slug>.nanoapps.ar/clientes       clientes
+https://<slug>.nanoapps.ar/servicios      servicios/equipo
+https://<slug>.nanoapps.ar/configuracion  configuración
+```
+
+`src/proxy.ts` reescribe esas rutas canónicas hacia las rutas internas de Next.js. `/app/*` y `/r/[slug]/*` son detalles internos de implementación.
+
+## Autenticación
+
+El navegador no elige libremente el tenant administrativo. Para iniciar sesión:
+
+1. el servidor resuelve el tenant desde `Host` / `X-Forwarded-Host`;
+2. verifica la membresía SaaS y su vencimiento;
+3. busca una membresía activa del usuario para ese tenant exacto;
+4. crea una sesión vinculada al `tenantId` resuelto;
+5. cada request administrativo vuelve a verificar que hostname, sesión y membresía correspondan al mismo tenant.
+
+La cookie de sesión es host-only, por lo que una sesión iniciada en `cliente-a.nanoapps.ar` no se comparte automáticamente con `cliente-b.nanoapps.ar`.
+
+El SuperAdmin usa una sesión separada con `tenantId=null` y sólo puede autenticarse en `onlyturn.nanoapps.ar/superadmin/login`.
+
+## Membresía y suspensión
+
+La última `Subscription` define el período de acceso. Un trial o membresía vencida se reconcilia a estado suspendido, bloqueando tanto sesiones nuevas como existentes. El tenant sigue resolviendo y muestra `/suspendido`. Una renovación desde SuperAdmin extiende el período y reactiva el mismo tenant sin reprovisionar datos.
 
 ## Aislamiento de datos
 
-`createTenantDb(tenantId)` ofrece operaciones cerradas. No devuelve el cliente Prisma y agrega `tenantId` internamente a las lecturas. En escrituras valida nuevamente sucursal, servicio, profesional y recurso dentro del mismo tenant, incluyendo relaciones anidadas.
+`createTenantDb(tenantId)` ofrece operaciones cerradas y agrega `tenantId` internamente a las lecturas/escrituras. El acceso global mediante `platformDb` queda reservado al plano de control, autenticación y resolución de tenants.
 
-El acceso global usa `platformDb` y se limita a servicios de plataforma, autenticación y a la implementación del repositorio tenant. SuperAdmin requiere una identidad `isSuperAdmin` independiente; un rol OWNER no concede acceso de plataforma.
+Un rol `OWNER` de tenant no concede privilegios de SuperAdmin.
 
 ## Validaciones obligatorias
 
-- usar un ID real del tenant A desde una sesión B y esperar rechazo;
-- intentar conectar servicio A con profesional B;
-- comprobar que búsquedas por teléfono permiten el mismo valor en tenants distintos;
-- verificar que SuperAdmin no obtiene implícitamente una membresía tenant;
-- ejecutar dos inserts solapados y comprobar que PostgreSQL acepta solo uno;
-- comprobar que `cliente.nanoapps.ar` devuelve `204` en `/api/internal/caddy/ask` solo si `cliente` pertenece a OnlyTurn;
-- comprobar que un slug inexistente devuelve `404` para que el router pueda probar el siguiente SaaS.
+- sesión de tenant A usada sobre hostname B: rechazo;
+- owner de tenant A intentando acceder a datos B: rechazo;
+- `cliente.nanoapps.ar` devuelve `204` en `ask` sólo si ese slug pertenece a OnlyTurn;
+- tenant suspendido continúa devolviendo `204` en `ask` y muestra `/suspendido`;
+- slug inexistente devuelve `404`;
+- `onlyturn.nanoapps.ar` no funciona como panel administrativo de un tenant;
+- el login de tenant vive en `slug.nanoapps.ar/login`;
+- el login SuperAdmin vive en `onlyturn.nanoapps.ar/superadmin/login`.
