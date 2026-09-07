@@ -6,6 +6,7 @@ import { BookingWizard } from "./booking-wizard";
 import { AnnouncementBoard } from "./announcement-board";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { platformDb } from "@/lib/db";
+import { getCustomerUsablePackages } from "@/lib/packages";
 
 type Branding = { primaryColor?: string; description?: string; logoUrl?: string; coverUrl?: string; splashUrl?: string };
 
@@ -36,6 +37,7 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
     getPublicExperience(tenant.id),
     getCustomerSession(tenant.id),
   ]);
+  const customerPackages = customerSession ? await getCustomerUsablePackages(tenant.id, customerSession.account.customerId) : [];
   const branding = tenant.branding as Branding;
   const settings = tenant.settings as { cancellationHours?: number };
 
@@ -60,6 +62,13 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
         cancellationHours={settings.cancellationHours ?? 12}
         locations={locations}
         services={services}
+        packages={customerPackages.map((membership) => ({
+          id: membership.id,
+          name: membership.name,
+          remainingUses: membership.remainingUses,
+          expiresAt: membership.expiresAt?.toISOString() ?? null,
+          serviceIds: membership.package.services.map((link) => link.serviceId),
+        }))}
         customer={customerSession ? {
           firstName: customerSession.account.customer.firstName,
           lastName: customerSession.account.customer.lastName ?? "",
@@ -68,7 +77,7 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
         } : undefined}
       />
       {experience.gallery.length > 0 && <section className="public-gallery"><h2>Conocé nuestro espacio</h2><div>{experience.gallery.map((item) => <img src={item.publicUrl} alt={item.altText ?? tenant.name} key={item.id} />)}</div></section>}
-      <p className="muted" style={{textAlign:"center",fontSize:11,marginTop:22}}>Agenda gestionada con <strong>OnlyTurn</strong> · NanoLabs</p>
+      <p className="muted" style={{ textAlign: "center", fontSize: 11, marginTop: 22 }}>Agenda gestionada con <strong>OnlyTurn</strong> · NanoLabs</p>
     </div>
   </main>;
 }
