@@ -1,18 +1,80 @@
-# Despliegue
+# Despliegue productivo
 
-El Compose local levanta PostgreSQL, un inicializador one-shot y la aplicación. La imagen usa Node 22, build multi-stage, salida standalone y usuario no-root. App y base tienen healthchecks, políticas de reinicio y rotación de logs; PostgreSQL solo existe en la red interna.
+OnlyTurn se despliega en la infraestructura NanoLabs como una única instancia SaaS multi-tenant.
 
-```bash
-cd /ruta/absoluta/onlyturn
-docker compose --env-file .env -p onlyturn up -d --build
-docker compose --env-file .env -p onlyturn ps
-docker compose --env-file .env -p onlyturn logs --tail=100 app migrate
+Ruta estándar del servidor:
+
+```text
+/opt/apps/onlyturn
 ```
 
-En producción se requiere HTTPS, proxy existente, DNS wildcard, secretos únicos, bucket Cloudflare R2, monitoreo y backups. No se deben publicar 80/443 ni el puerto de PostgreSQL sin inventariar el host. El proxy debe enviar el hostname original y conectarse al puerto interno acordado.
+Topología:
+
+```text
+Internet
+  ↓
+Nginx Proxy Manager
+  ↓ red Docker proxy
+onlyturn-web:3000
+  ↓ red onlyturn-internal
+onlyturn-db:5432
+```
+
+PostgreSQL nunca publica un puerto al host.
+
+## Dominios
+
+- plataforma: `onlyturn.nanoapps.ar`
+- tenants: `*.onlyturn.nanoapps.ar`
+
+OnlyTurn no debe recibir el wildcard genérico `*.nanoapps.ar`, porque ese namespace se comparte con otros productos NanoLabs.
+
+Nginx Proxy Manager debe conservar `Host` / `X-Forwarded-Host` y dirigir plataforma + wildcard de OnlyTurn al contenedor `onlyturn-web` por la red `proxy`.
+
+## Deploy
+
+```bash
+cd /opt/apps/onlyturn
+docker compose --env-file .env up -d --build
+docker compose --env-file .env ps
+docker compose --env-file .env logs --tail=100 app migrate
+```
+
+El flujo es:
+
+1. PostgreSQL inicia y queda healthy.
+2. `migrate` ejecuta `prisma migrate deploy`.
+3. El bootstrap sincroniza planes y, si se proporcionan credenciales, el SuperAdmin NanoLabs.
+4. La aplicación inicia solamente si DB y migraciones terminaron correctamente.
+5. `/api/health` valida proceso + acceso a PostgreSQL.
+
+No se ejecuta ningún seed de tenants demo durante el deploy.
+
+## Variables críticas
+
+El Compose falla de forma explícita si falta:
+
+- `POSTGRES_PASSWORD`
+- `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`
+
+`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` debe ser estable entre rebuilds. Generar una clave AES válida de 32 bytes codificada en Base64 y conservarla como secreto productivo.
+
+`PAYMENT_ENCRYPTION_KEY` es obligatoria antes de habilitar Mercado Pago y debe tener al menos 32 caracteres.
 
 ## Cloudflare R2
 
-Crear un bucket para OnlyTurn, habilitar un dominio público de lectura y generar un token limitado a lectura/escritura de objetos en ese bucket. Configurar las cinco variables `R2_*` documentadas en `.env.example`. No usar claves globales de la cuenta de Cloudflare.
+Crear un bucket exclusivo de OnlyTurn, dominio público de lectura y token limitado al bucket. Configurar las variables `R2_*` documentadas en `.env.example`. No utilizar credenciales globales de Cloudflare.
 
-`/api/health` confirma proceso y base. Un despliegue solo queda validado después de login tenant, SuperAdmin, reserva pública, cancelación, aislamiento y restauración de backup en entorno separado.
+## Validación después de deploy
+
+Como mínimo:
+
+- contenedores healthy;
+- `/api/health` en estado `ok`;
+- login SuperAdmin;
+- login tenant cuando exista uno;
+- alta de tenant desde SuperAdmin;
+- reserva pública por `<slug>.onlyturn.nanoapps.ar`;
+- confirmación de que `<slug>.nanoapps.ar` no es capturado por OnlyTurn.
+
+Cuando existan clientes reales, incorporar el backup de PostgreSQL a la política central de backups de NanoLabs antes de cada cambio de schema con riesgo.
