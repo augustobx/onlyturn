@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPublicBookingAction } from "@/app/actions/public-booking";
+import { WaitlistForm } from "./waitlist-form";
 
 type Location = { id: string; name: string; address: string | null };
 type CustomField = {
@@ -118,6 +119,7 @@ export function BookingWizard({
   );
   const selectionReady = isSessionType ? Boolean(selectedSession) : Boolean(slot);
   const partyMax = isSessionType ? Math.min(service?.maxPartySize ?? 1, selectedSession?.available ?? 1) : service?.maxPartySize ?? 1;
+  const fullSessions = useMemo(() => sessions.filter((item) => item.available < (service?.minPartySize ?? 1)), [sessions, service?.minPartySize]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -358,6 +360,12 @@ export function BookingWizard({
               </div>
             )}
             {!loadingAvailability && !sessions.length && <div className="empty">No hay próximas sesiones publicadas con disponibilidad.</div>}
+            {!loadingAvailability && service?.allowWaitlist && !sessions.length && (
+              <WaitlistForm slug={slug} locationId={locationId} serviceId={service.id} minPartySize={service.minPartySize} maxPartySize={service.maxPartySize} customer={customer} />
+            )}
+            {!loadingAvailability && service?.allowWaitlist && fullSessions.map((item) => (
+              <WaitlistForm key={item.id} slug={slug} locationId={locationId} serviceId={service.id} sessionId={item.id} minPartySize={service.minPartySize} maxPartySize={Math.max(service.minPartySize, service.maxPartySize)} customer={customer} />
+            ))}
           </>
         ) : (
           <>
@@ -382,6 +390,9 @@ export function BookingWizard({
               ? <div className="empty">Buscando horarios disponibles…</div>
               : <div className="time-groups">{slots.map((value) => <button type="button" className={slot === value ? "active" : ""} onClick={() => chooseSlot(value)} key={value}>{new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: timezone }).format(new Date(value))}</button>)}</div>}
             {!loadingAvailability && assignmentReady && !slots.length && <div className="empty">No hay horarios libres este día. Elegí otra fecha.</div>}
+            {!loadingAvailability && assignmentReady && !slots.length && service?.allowWaitlist && (
+              <WaitlistForm slug={slug} locationId={locationId} serviceId={service.id} professionalId={professionalId || undefined} resourceId={resourceId || undefined} preferredDate={date} minPartySize={service.minPartySize} maxPartySize={service.maxPartySize} customer={customer} />
+            )}
             {!assignmentReady && <div className="empty">Completá las selecciones requeridas para consultar disponibilidad.</div>}
           </>
         )}
