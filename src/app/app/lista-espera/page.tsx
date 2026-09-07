@@ -48,7 +48,7 @@ export default async function WaitlistPage() {
                     <td>
                       {entry.session ? (
                         <span><Clock3 size={13} style={{ verticalAlign: "-2px" }} /> {formatInTimeZone(entry.session.startsAt, tenant.timezone, "dd/MM HH:mm")}</span>
-                      ) : preferences.preferredDate ? preferences.preferredDate.split("-").reverse().join("/") : "Cualquier horario"
+                      ) : preferences.preferredDate ? preferences.preferredDate.split("-").reverse().join("/") : "Cualquier horario"}
                     </td>
                     <td>{formatInTimeZone(entry.createdAt, tenant.timezone, "dd/MM HH:mm")}</td>
                     <td><span className={`status ${entry.status}`}>{entry.status === "WAITING" ? "Esperando" : "Oferta enviada"}</span></td>
