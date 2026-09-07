@@ -4,9 +4,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireTenantSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { getPublicTenant } from "@/lib/booking-service";
+import { assertPublicCustomerAccess } from "@/lib/public-customer-access";
 import { cancelWaitlistEntry, createPublicWaitlistEntry } from "@/lib/waitlist";
 
 export async function createPublicWaitlistAction(raw: unknown) {
+  if (raw && typeof raw === "object" && "tenantSlug" in raw && typeof raw.tenantSlug === "string") {
+    const tenant = await getPublicTenant(raw.tenantSlug);
+    if (tenant) await assertPublicCustomerAccess(tenant);
+  }
   return createPublicWaitlistEntry(raw);
 }
 
