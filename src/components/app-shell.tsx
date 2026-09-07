@@ -16,6 +16,7 @@ import {
   ListChecks,
   LogOut,
   Menu,
+  Palette,
   Repeat2,
   Settings,
   ShieldCheck,
@@ -87,6 +88,10 @@ const tenantItems: Record<string, NavItem> = {
     href: "/paquetes", internal: "/app/paquetes", label: "Paquetes y membresías", icon: BadgeCheck,
     help: { title: "Paquetes y membresías", purpose: "Gestiona bonos, packs y pases con una cantidad de usos y vencimiento opcional.", steps: ["Creá un paquete y definí qué servicios incluye.", "Asignalo al cliente después de una venta, promoción o cortesía.", "Cada reserva puede consumir usos automáticamente y el cliente ve el saldo de su pase."], tip: "Los usos se devuelven automáticamente cuando una reserva cubierta por el paquete se cancela correctamente." },
   },
+  apariencia: {
+    href: "/apariencia", internal: "/app/apariencia", label: "Apariencia PWA", icon: Palette,
+    help: { title: "Apariencia PWA", purpose: "Personaliza la aplicación pública de reservas de este negocio sin modificar el panel administrativo.", steps: ["Elegí uno de los temas profesionales disponibles.", "Ajustá color principal y secundario si necesitás acercarlo a la marca.", "Revisá la vista previa y guardá; el cambio se aplica sólo a este tenant."], tip: "Logo, portada, splash y galería se gestionan en Configuración → Imágenes y se combinan con el tema seleccionado." },
+  },
   disponibilidad: {
     href: "/disponibilidad", internal: "/app/disponibilidad", label: "Disponibilidad", icon: CalendarClock,
     help: { title: "Disponibilidad", purpose: "Define cuándo puede reservarse el negocio, una sede, un profesional o un recurso.", steps: ["Creá la jornada general del negocio.", "Agregá reglas específicas para sedes, profesionales o recursos cuando difieran.", "Usá varios bloques en un mismo día para jornadas partidas."], tip: "OnlyTurn intersecta las reglas: sólo ofrece horarios donde coinciden todas las disponibilidades necesarias." },
@@ -117,7 +122,7 @@ const primaryTenantLinks = [tenantItems.dashboard, tenantItems.agenda, tenantIte
 
 const tenantGroups: NavGroup[] = [
   { label: "Reservas avanzadas", description: "Cupos, series y demanda", items: [tenantItems.sesiones, tenantItems.recurrencias, tenantItems.waitlist] },
-  { label: "Oferta y ventas", description: "Catálogo y monetización", items: [tenantItems.servicios, tenantItems.extras, tenantItems.paquetes] },
+  { label: "Oferta y experiencia", description: "Catálogo, marca y monetización", items: [tenantItems.servicios, tenantItems.apariencia, tenantItems.extras, tenantItems.paquetes] },
   { label: "Reglas y operación", description: "Disponibilidad y automatización", items: [tenantItems.disponibilidad, tenantItems.politicas, tenantItems.automatizaciones, tenantItems.calendario] },
   { label: "Control del negocio", description: "Análisis y ajustes", items: [tenantItems.reportes, tenantItems.configuracion] },
 ];
