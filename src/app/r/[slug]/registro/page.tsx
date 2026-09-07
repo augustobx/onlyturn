@@ -1,0 +1,7 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { getPublicTenant } from "@/lib/booking-service";
+import { getCustomerSession } from "@/lib/customer-auth";
+import { CustomerRegisterForm } from "../customer-auth-forms";
+
+export default async function CustomerRegistrationPage({params}:{params:Promise<{slug:string}>}){const {slug}=await params;const tenant=await getPublicTenant(slug);if(!tenant)notFound();if(await getCustomerSession(tenant.id))redirect(`/r/${slug}/mi-cuenta`);const settings=tenant.settings as {customerRegistrationEnabled?:boolean;customerApprovalRequired?:boolean};if(!settings.customerRegistrationEnabled)return <main className="booking-page customer-portal"><div className="booking-wrap"><div className="wizard success"><h1>Registro no disponible</h1><p className="muted">Este negocio no tiene habilitado el registro público de clientes.</p><Link className="button" href={`/r/${slug}`}>Volver</Link></div></div></main>;return <main className="booking-page customer-portal"><div className="booking-wrap"><div className="public-brand"><div className="logo">{tenant.name[0]}</div><h1>Crear mi cuenta</h1><p className="muted">{settings.customerApprovalRequired?"El negocio revisará tu solicitud antes de habilitarla.":"Accedé a tu historial y perfil después de registrarte."}</p></div><CustomerRegisterForm slug={slug}/><div className="customer-auth-links"><Link href={`/r/${slug}/cuenta`}>Ya tengo una cuenta</Link><Link href={`/r/${slug}`}>Volver a reservar</Link></div></div></main>}

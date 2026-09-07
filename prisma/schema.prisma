@@ -1,0 +1,745 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELLED
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MANAGER
+  RECEPTIONIST
+  PROFESSIONAL
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum BookingOrigin {
+  PUBLIC
+  ADMIN
+  IMPORT
+  API
+}
+
+enum RequirementMode {
+  NONE
+  OPTIONAL
+  REQUIRED
+}
+
+enum AvailabilityOwnerType {
+  TENANT
+  LOCATION
+  PROFESSIONAL
+  RESOURCE
+}
+
+enum ExceptionType {
+  AVAILABLE
+  BLOCKED
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  PHONE
+  EMAIL
+  DATE
+  SELECT
+  MULTI_SELECT
+  CHECKBOX
+  TEXTAREA
+}
+
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum AuditScope {
+  PLATFORM
+  TENANT
+}
+
+enum PaymentStatus {
+  NOT_REQUIRED
+  PENDING
+  AUTHORIZED
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  FAILED
+}
+
+enum CustomerAccountStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  SUSPENDED
+}
+
+enum LedgerEntryType {
+  CHARGE
+  PAYMENT
+  CREDIT
+  ADJUSTMENT
+}
+
+enum MediaAssetKind {
+  LOGO
+  COVER
+  SPLASH
+  GALLERY
+  SERVICE
+}
+
+model Tenant {
+  id                  String                      @id @default(cuid())
+  slug                String                      @unique
+  name                String
+  status              TenantStatus                @default(TRIAL)
+  timezone            String                      @default("America/Argentina/Buenos_Aires")
+  currency            String                      @default("ARS")
+  category            String?
+  trialEndsAt         DateTime?
+  lastAccessAt        DateTime?
+  onboardingStep      Int                         @default(1)
+  onboardingDone      Boolean                     @default(false)
+  settings            Json                        @default("{}")
+  branding            Json                        @default("{}")
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+  archivedAt          DateTime?
+  memberships         Membership[]
+  locations           Location[]
+  professionals       Professional[]
+  resources           Resource[]
+  services            Service[]
+  customers           Customer[]
+  bookings            Booking[]
+  customFields        CustomField[]
+  availability        AvailabilityRule[]
+  exceptions          AvailabilityException[]
+  subscriptions       Subscription[]
+  sessions            Session[]
+  auditLogs           AuditLog[]
+  notificationLogs    NotificationLog[]
+  featureOverrides    TenantFeatureOverride[]
+  customDomains       CustomDomain[]
+  mediaAssets         MediaAsset[]
+  announcements       Announcement[]
+  paymentConnections  PaymentProviderConnection[]
+  paymentTransactions PaymentTransaction[]
+  customerAccounts    CustomerAccount[]
+  customerSessions    CustomerSession[]
+  customerLedger      CustomerLedgerEntry[]
+}
+
+model User {
+  id              String       @id @default(cuid())
+  email           String       @unique
+  name            String
+  passwordHash    String
+  isSuperAdmin    Boolean      @default(false)
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  memberships     Membership[]
+  sessions        Session[]
+  auditLogs       AuditLog[]   @relation("AuditActor")
+  createdBookings Booking[]    @relation("BookingCreator")
+}
+
+model Membership {
+  id           String         @id @default(cuid())
+  tenantId     String
+  userId       String
+  role         MembershipRole
+  permissions  String[]       @default([])
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  professional Professional?
+
+  @@unique([tenantId, userId])
+  @@index([userId, isActive])
+}
+
+model Session {
+  id         String   @id
+  userId     String
+  tenantId   String?
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  ipHash     String?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([tenantId, expiresAt])
+}
+
+model Plan {
+  id            String         @id @default(cuid())
+  code          String         @unique
+  name          String
+  description   String?
+  priceCents    Int            @default(0)
+  currency      String         @default("ARS")
+  isActive      Boolean        @default(true)
+  features      Json
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  tenantId           String
+  planId             String
+  status             SubscriptionStatus @default(TRIALING)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  trialEndsAt        DateTime?
+  discountPercent    Int                @default(0)
+  provider           String?
+  providerReference  String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan               Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, currentPeriodEnd])
+}
+
+model TenantFeatureOverride {
+  id        String   @id @default(cuid())
+  tenantId  String
+  key       String
+  enabled   Boolean?
+  limit     Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+}
+
+model Location {
+  id               String                  @id @default(cuid())
+  tenantId         String
+  name             String
+  slug             String
+  address          String?
+  phone            String?
+  timezone         String?
+  settings         Json                    @default("{}")
+  isActive         Boolean                 @default(true)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  tenant           Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  professionals    Professional[]
+  resources        Resource[]
+  serviceLocations ServiceLocation[]
+  bookings         Booking[]
+  availability     AvailabilityRule[]
+  exceptions       AvailabilityException[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, isActive])
+}
+
+model Professional {
+  id           String                  @id @default(cuid())
+  tenantId     String
+  locationId   String?
+  membershipId String?                 @unique
+  name         String
+  color        String                  @default("#5b5cf0")
+  bio          String?
+  isActive     Boolean                 @default(true)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  location     Location?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  membership   Membership?             @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  services     ServiceProfessional[]
+  bookings     Booking[]
+  availability AvailabilityRule[]
+  exceptions   AvailabilityException[]
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, locationId])
+}
+
+model Resource {
+  id           String                  @id @default(cuid())
+  tenantId     String
+  locationId   String?
+  name         String
+  type         String?
+  capacity     Int                     @default(1)
+  color        String                  @default("#10b981")
+  isActive     Boolean                 @default(true)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  location     Location?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  services     ServiceResource[]
+  bookings     Booking[]
+  availability AvailabilityRule[]
+  exceptions   AvailabilityException[]
+
+  @@index([tenantId, isActive])
+  @@index([tenantId, locationId])
+}
+
+model Service {
+  id                 String                @id @default(cuid())
+  tenantId           String
+  name               String
+  description        String?
+  category           String?
+  durationMinutes    Int
+  variableDuration   Boolean               @default(false)
+  preparationMinutes Int                   @default(0)
+  bufferMinutes      Int                   @default(0)
+  priceCents         Int?
+  color              String                @default("#5b5cf0")
+  imageKey           String?
+  capacity           Int                   @default(1)
+  professionalMode   RequirementMode       @default(OPTIONAL)
+  resourceMode       RequirementMode       @default(NONE)
+  isActive           Boolean               @default(true)
+  onlineEnabled      Boolean               @default(true)
+  depositPolicy      Json?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  tenant             Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  professionals      ServiceProfessional[]
+  resources          ServiceResource[]
+  locations          ServiceLocation[]
+  bookings           Booking[]
+  customFields       CustomField[]
+
+  @@index([tenantId, isActive, onlineEnabled])
+}
+
+model ServiceProfessional {
+  tenantId       String
+  serviceId      String
+  professionalId String
+  service        Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@id([serviceId, professionalId])
+  @@index([tenantId, professionalId])
+}
+
+model ServiceResource {
+  tenantId   String
+  serviceId  String
+  resourceId String
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@id([serviceId, resourceId])
+  @@index([tenantId, resourceId])
+}
+
+model ServiceLocation {
+  tenantId   String
+  serviceId  String
+  locationId String
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([serviceId, locationId])
+  @@index([tenantId, locationId])
+}
+
+model AvailabilityRule {
+  id             String                @id @default(cuid())
+  tenantId       String
+  ownerType      AvailabilityOwnerType
+  locationId     String?
+  professionalId String?
+  resourceId     String?
+  weekday        Int
+  startMinute    Int
+  endMinute      Int
+  validFrom      DateTime?
+  validUntil     DateTime?
+  isActive       Boolean               @default(true)
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location       Location?             @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  professional   Professional?         @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  resource       Resource?             @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, ownerType, weekday, isActive])
+  @@index([tenantId, professionalId, weekday])
+  @@index([tenantId, resourceId, weekday])
+}
+
+model AvailabilityException {
+  id             String        @id @default(cuid())
+  tenantId       String
+  locationId     String?
+  professionalId String?
+  resourceId     String?
+  type           ExceptionType @default(BLOCKED)
+  startsAt       DateTime
+  endsAt         DateTime
+  reason         String?
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location       Location?     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  resource       Resource?     @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startsAt, endsAt])
+  @@index([tenantId, professionalId, startsAt])
+  @@index([tenantId, resourceId, startsAt])
+}
+
+model Customer {
+  id              String                @id @default(cuid())
+  tenantId        String
+  firstName       String
+  lastName        String?
+  phone           String
+  normalizedPhone String
+  email           String?
+  normalizedEmail String?
+  document        String?
+  birthDate       DateTime?
+  notes           String?
+  tags            String[]              @default([])
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  archivedAt      DateTime?
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  bookings        Booking[]
+  customValues    CustomFieldValue[]
+  account         CustomerAccount?
+  ledgerEntries   CustomerLedgerEntry[]
+
+  @@unique([tenantId, normalizedPhone])
+  @@index([tenantId, normalizedEmail])
+  @@index([tenantId, createdAt])
+}
+
+model CustomerAccount {
+  id              String                @id @default(cuid())
+  tenantId        String
+  customerId      String                @unique
+  email           String
+  normalizedEmail String
+  passwordHash    String
+  status          CustomerAccountStatus @default(PENDING)
+  approvedAt      DateTime?
+  approvedById    String?
+  rejectedAt      DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer        Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sessions        CustomerSession[]
+
+  @@unique([tenantId, normalizedEmail])
+  @@index([tenantId, status, createdAt])
+}
+
+model CustomerSession {
+  id         String          @id
+  tenantId   String
+  accountId  String
+  tokenHash  String          @unique
+  expiresAt  DateTime
+  createdAt  DateTime        @default(now())
+  lastSeenAt DateTime        @default(now())
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account    CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, accountId, expiresAt])
+}
+
+model CustomerLedgerEntry {
+  id          String          @id @default(cuid())
+  tenantId    String
+  customerId  String
+  type        LedgerEntryType
+  amountCents Int
+  description String
+  bookingId   String?
+  createdById String?
+  createdAt   DateTime        @default(now())
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer    Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, customerId, createdAt])
+  @@index([tenantId, bookingId])
+}
+
+model Booking {
+  id                  String               @id @default(cuid())
+  publicTokenHash     String?              @unique
+  tenantId            String
+  locationId          String
+  customerId          String
+  serviceId           String
+  professionalId      String?
+  resourceId          String?
+  startsAt            DateTime
+  endsAt              DateTime
+  capacityStartsAt    DateTime
+  capacityEndsAt      DateTime
+  durationMinutes     Int
+  priceCents          Int?
+  status              BookingStatus        @default(PENDING)
+  consumesCapacity    Boolean              @default(true)
+  origin              BookingOrigin        @default(PUBLIC)
+  notes               String?
+  internalNotes       String?
+  cancellationReason  String?
+  cancelledAt         DateTime?
+  createdById         String?
+  paymentStatus       PaymentStatus        @default(NOT_REQUIRED)
+  paymentAmountCents  Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  location            Location             @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  service             Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  professional        Professional?        @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  resource            Resource?            @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  createdBy           User?                @relation("BookingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  history             BookingHistory[]
+  customValues        CustomFieldValue[]
+  notificationLogs    NotificationLog[]
+  paymentTransactions PaymentTransaction[]
+
+  @@index([tenantId, startsAt, endsAt])
+  @@index([tenantId, capacityStartsAt, capacityEndsAt])
+  @@index([tenantId, locationId, startsAt])
+  @@index([tenantId, professionalId, startsAt])
+  @@index([tenantId, resourceId, startsAt])
+  @@index([tenantId, customerId, startsAt])
+}
+
+model BookingHistory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  bookingId String
+  actorId   String?
+  action    String
+  fromState Json?
+  toState   Json?
+  createdAt DateTime @default(now())
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, bookingId, createdAt])
+}
+
+model CustomField {
+  id                String             @id @default(cuid())
+  tenantId          String
+  serviceId         String?
+  key               String
+  label             String
+  type              CustomFieldType
+  required          Boolean            @default(false)
+  appliesToCustomer Boolean            @default(false)
+  options           Json?
+  sortOrder         Int                @default(0)
+  isActive          Boolean            @default(true)
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  service           Service?           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  values            CustomFieldValue[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, serviceId, isActive])
+}
+
+model CustomFieldValue {
+  id            String      @id @default(cuid())
+  tenantId      String
+  customFieldId String
+  bookingId     String?
+  customerId    String?
+  value         Json
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  customField   CustomField @relation(fields: [customFieldId], references: [id], onDelete: Restrict)
+  booking       Booking?    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customer      Customer?   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customFieldId, bookingId])
+  @@unique([customFieldId, customerId])
+  @@index([tenantId, bookingId])
+  @@index([tenantId, customerId])
+}
+
+model NotificationLog {
+  id                String              @id @default(cuid())
+  tenantId          String
+  bookingId         String?
+  event             String
+  channel           NotificationChannel
+  status            NotificationStatus  @default(PENDING)
+  recipientHash     String
+  provider          String?
+  providerMessageId String?
+  scheduledFor      DateTime
+  sentAt            DateTime?
+  attempts          Int                 @default(0)
+  lastError         String?
+  idempotencyKey    String              @unique
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking           Booking?            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledFor])
+  @@index([tenantId, createdAt])
+}
+
+model AuditLog {
+  id         String     @id @default(cuid())
+  scope      AuditScope
+  tenantId   String?
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime   @default(now())
+  tenant     Tenant?    @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  actor      User?      @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([scope, createdAt])
+}
+
+model CustomDomain {
+  id         String    @id @default(cuid())
+  tenantId   String
+  hostname   String    @unique
+  verifiedAt DateTime?
+  isPrimary  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, verifiedAt])
+}
+
+model PaymentProviderConnection {
+  id                   String   @id @default(cuid())
+  tenantId             String
+  provider             String
+  encryptedCredentials String
+  status               String   @default("ACTIVE")
+  displayName          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@index([tenantId, status])
+}
+
+model PaymentTransaction {
+  id                String        @id @default(cuid())
+  tenantId          String
+  bookingId         String
+  provider          String
+  kind              String
+  externalReference String        @unique
+  preferenceId      String?       @unique
+  paymentId         String?       @unique
+  checkoutUrl       String?
+  amountCents       Int
+  currency          String
+  status            PaymentStatus @default(PENDING)
+  expiresAt         DateTime?
+  rawStatus         String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  booking           Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([bookingId, status])
+  @@index([status, expiresAt])
+}
+
+model MediaAsset {
+  id         String         @id @default(cuid())
+  tenantId   String
+  kind       MediaAssetKind
+  objectKey  String         @unique
+  publicUrl  String
+  mimeType   String
+  sizeBytes  Int
+  altText    String?
+  createdAt  DateTime       @default(now())
+  archivedAt DateTime?
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, kind, archivedAt])
+}
+
+model Announcement {
+  id        String    @id @default(cuid())
+  tenantId  String
+  title     String
+  body      String
+  startsAt  DateTime
+  endsAt    DateTime?
+  isActive  Boolean   @default(true)
+  style     String    @default("INFO")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive, startsAt, endsAt])
+}

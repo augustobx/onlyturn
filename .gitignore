@@ -1,0 +1,13 @@
+node_modules
+.next
+.env
+.env.local
+.env*.local
+coverage
+*.log
+generated
+backups/*.sql*
+backups/*.dump
+tsconfig.tsbuildinfo
+!.env.example
+
