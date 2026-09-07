@@ -155,6 +155,13 @@ enum LedgerEntryType {
   ADJUSTMENT
 }
 
+enum CustomerPackageStatus {
+  ACTIVE
+  EXHAUSTED
+  EXPIRED
+  CANCELLED
+}
+
 enum MediaAssetKind {
   LOGO
   COVER
@@ -192,6 +199,9 @@ model Tenant {
   waitlistEntries     WaitlistEntry[]
   serviceAddons       ServiceAddon[]
   bookingAddons       BookingAddon[]
+  servicePackages     ServicePackage[]
+  customerPackages    CustomerPackage[]
+  packageUsages       PackageUsage[]
   automationRules     AutomationRule[]
   customFields        CustomField[]
   availability        AvailabilityRule[]
@@ -385,34 +395,34 @@ model Resource {
 }
 
 model Service {
-  id                 String                @id @default(cuid())
+  id                 String                  @id @default(cuid())
   tenantId           String
   name               String
   description        String?
   category           String?
-  bookingType        BookingType           @default(APPOINTMENT)
-  assignmentStrategy AssignmentStrategy    @default(CLIENT_CHOOSES)
+  bookingType        BookingType             @default(APPOINTMENT)
+  assignmentStrategy AssignmentStrategy      @default(CLIENT_CHOOSES)
   durationMinutes    Int
-  variableDuration   Boolean               @default(false)
-  preparationMinutes Int                   @default(0)
-  bufferMinutes      Int                   @default(0)
+  variableDuration   Boolean                 @default(false)
+  preparationMinutes Int                     @default(0)
+  bufferMinutes      Int                     @default(0)
   priceCents         Int?
-  color              String                @default("#5b5cf0")
+  color              String                  @default("#5b5cf0")
   imageKey           String?
-  capacity           Int                   @default(1)
-  minPartySize       Int                   @default(1)
-  maxPartySize       Int                   @default(1)
-  professionalMode   RequirementMode       @default(OPTIONAL)
-  resourceMode       RequirementMode       @default(NONE)
-  bookingPolicy      Json                  @default("{}")
-  allowWaitlist      Boolean               @default(false)
-  allowRecurring     Boolean               @default(false)
-  isActive           Boolean               @default(true)
-  onlineEnabled      Boolean               @default(true)
+  capacity           Int                     @default(1)
+  minPartySize       Int                     @default(1)
+  maxPartySize       Int                     @default(1)
+  professionalMode   RequirementMode         @default(OPTIONAL)
+  resourceMode       RequirementMode         @default(NONE)
+  bookingPolicy      Json                    @default("{}")
+  allowWaitlist      Boolean                 @default(false)
+  allowRecurring     Boolean                 @default(false)
+  isActive           Boolean                 @default(true)
+  onlineEnabled      Boolean                 @default(true)
   depositPolicy      Json?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  tenant             Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  tenant             Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   professionals      ServiceProfessional[]
   resources          ServiceResource[]
   locations          ServiceLocation[]
@@ -421,6 +431,7 @@ model Service {
   bookingSeries      BookingSeries[]
   waitlistEntries    WaitlistEntry[]
   addons             ServiceAddon[]
+  packageServices    ServicePackageService[]
   customFields       CustomField[]
 
   @@index([tenantId, isActive, onlineEnabled])
@@ -478,6 +489,35 @@ model ServiceAddon {
   bookingAddons      BookingAddon[]
 
   @@index([tenantId, serviceId, isActive, sortOrder])
+}
+
+model ServicePackage {
+  id               String                  @id @default(cuid())
+  tenantId         String
+  name             String
+  description      String?
+  priceCents       Int                     @default(0)
+  uses             Int
+  validityDays     Int?
+  isActive         Boolean                 @default(true)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  tenant           Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  services         ServicePackageService[]
+  customerPackages CustomerPackage[]
+
+  @@index([tenantId, isActive, name])
+}
+
+model ServicePackageService {
+  tenantId  String
+  packageId String
+  serviceId String
+  package   ServicePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  service   Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([packageId, serviceId])
+  @@index([tenantId, serviceId])
 }
 
 model AvailabilityRule {
@@ -546,6 +586,7 @@ model Customer {
   customValues    CustomFieldValue[]
   account         CustomerAccount?
   ledgerEntries   CustomerLedgerEntry[]
+  packages        CustomerPackage[]
 
   @@unique([tenantId, normalizedPhone])
   @@index([tenantId, normalizedEmail])
@@ -605,6 +646,29 @@ model CustomerLedgerEntry {
   @@index([tenantId, bookingId])
 }
 
+model CustomerPackage {
+  id                  String                @id @default(cuid())
+  tenantId            String
+  customerId          String
+  packageId           String
+  name                String
+  purchasedPriceCents Int                   @default(0)
+  totalUses           Int
+  remainingUses       Int
+  startsAt            DateTime              @default(now())
+  expiresAt           DateTime?
+  status              CustomerPackageStatus @default(ACTIVE)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  tenant              Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer            Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  package             ServicePackage        @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  usages              PackageUsage[]
+
+  @@index([tenantId, customerId, status, expiresAt])
+  @@index([tenantId, packageId])
+}
+
 model Booking {
   id                  String               @id @default(cuid())
   publicTokenHash     String?              @unique
@@ -647,6 +711,7 @@ model Booking {
   history             BookingHistory[]
   customValues        CustomFieldValue[]
   addons              BookingAddon[]
+  packageUsage        PackageUsage?
   waitlistConversion  WaitlistEntry?       @relation("WaitlistConversion")
   notificationLogs    NotificationLog[]
   paymentTransactions PaymentTransaction[]
@@ -659,6 +724,20 @@ model Booking {
   @@index([tenantId, customerId, startsAt])
   @@index([tenantId, sessionId])
   @@index([tenantId, seriesId])
+}
+
+model PackageUsage {
+  id                String          @id @default(cuid())
+  tenantId          String
+  customerPackageId String
+  bookingId         String          @unique
+  uses              Int             @default(1)
+  createdAt         DateTime        @default(now())
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerPackage   CustomerPackage @relation(fields: [customerPackageId], references: [id], onDelete: Restrict)
+  booking           Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, customerPackageId, createdAt])
 }
 
 model BookingSession {
