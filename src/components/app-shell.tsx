@@ -3,6 +3,7 @@
 import {
   BriefcaseBusiness,
   CalendarCheck2,
+  CalendarClock,
   CalendarDays,
   LayoutDashboard,
   LogOut,
@@ -22,6 +23,7 @@ const tenantLinks = [
   { href: "/agenda", internal: "/app/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/clientes", internal: "/app/clientes", label: "Clientes", icon: Users },
   { href: "/servicios", internal: "/app/catalogo", label: "Servicios y equipo", icon: BriefcaseBusiness },
+  { href: "/disponibilidad", internal: "/app/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
   { href: "/configuracion", internal: "/app/configuracion", label: "Configuración", icon: Settings },
 ];
 
