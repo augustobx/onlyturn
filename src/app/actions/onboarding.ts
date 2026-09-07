@@ -47,5 +47,5 @@ export async function completeOnboardingAction(formData: FormData) {
     }});
     await tx.auditLog.create({ data: { scope: "TENANT", tenantId: membership.tenantId, actorId: session.userId, action: "onboarding.completed", entityType: "Tenant", entityId: membership.tenantId, metadata: { locationId: location.id, serviceId: service.id } } });
   });
-  redirect("/app");
+  redirect("/dashboard");
 }
