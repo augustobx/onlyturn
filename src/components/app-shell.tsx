@@ -5,6 +5,7 @@ import {
   CalendarCheck2,
   CalendarClock,
   CalendarDays,
+  CalendarRange,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -21,6 +22,7 @@ import { logoutAction } from "@/app/actions/auth";
 const tenantLinks = [
   { href: "/dashboard", internal: "/app", label: "Resumen", icon: LayoutDashboard },
   { href: "/agenda", internal: "/app/agenda", label: "Agenda", icon: CalendarDays },
+  { href: "/sesiones", internal: "/app/sesiones", label: "Clases y eventos", icon: CalendarRange },
   { href: "/clientes", internal: "/app/clientes", label: "Clientes", icon: Users },
   { href: "/servicios", internal: "/app/catalogo", label: "Servicios y equipo", icon: BriefcaseBusiness },
   { href: "/disponibilidad", internal: "/app/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
