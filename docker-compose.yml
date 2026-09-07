@@ -64,6 +64,15 @@ services:
       TENANT_BASE_DOMAIN: ${TENANT_BASE_DOMAIN:-nanoapps.ar}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?NEXT_SERVER_ACTIONS_ENCRYPTION_KEY is required}
+      AUTOMATION_CRON_SECRET: ${AUTOMATION_CRON_SECRET:?AUTOMATION_CRON_SECRET is required}
+      CALENDAR_FEED_SECRET: ${CALENDAR_FEED_SECRET:?CALENDAR_FEED_SECRET is required}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      NOTIFICATION_FROM_EMAIL: ${NOTIFICATION_FROM_EMAIL:-}
+      WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
+      WHATSAPP_WEBHOOK_TOKEN: ${WHATSAPP_WEBHOOK_TOKEN:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_GRAPH_VERSION: ${WHATSAPP_GRAPH_VERSION:-}
       PAYMENT_ENCRYPTION_KEY: ${PAYMENT_ENCRYPTION_KEY:-}
       R2_ENDPOINT: ${R2_ENDPOINT:-}
       R2_BUCKET: ${R2_BUCKET:-}
@@ -86,6 +95,30 @@ services:
     networks:
       - internal
       - proxy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  automation-worker:
+    image: curlimages/curl:8.12.1
+    container_name: onlyturn-automation-worker
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -fsS -X POST -H "Authorization: Bearer $${AUTOMATION_CRON_SECRET}" http://app:3000/api/internal/automation/run >/dev/null || true
+          sleep 60
+        done
+    environment:
+      AUTOMATION_CRON_SECRET: ${AUTOMATION_CRON_SECRET:?AUTOMATION_CRON_SECRET is required}
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
     logging:
       driver: "json-file"
       options:
