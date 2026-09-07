@@ -14,6 +14,9 @@ const createTenantSchema = z.object({
   ownerEmail: z.email().transform((value) => value.toLowerCase()),
   password: z.string().min(10).max(200),
   planId: z.string().min(1),
+  initialStatus: z.enum(["TRIAL", "ACTIVE"]).default("TRIAL"),
+  membershipStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  membershipEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 const subscriptionStatusForTenant = {
@@ -22,6 +25,20 @@ const subscriptionStatusForTenant = {
   SUSPENDED: "PAUSED",
   CANCELLED: "CANCELLED",
 } as const;
+
+function parseStart(value: string | undefined, fallback: Date) {
+  return value ? new Date(`${value}T12:00:00.000Z`) : fallback;
+}
+
+function parseEnd(value: string | undefined, fallback: Date) {
+  return value ? new Date(`${value}T23:59:59.999Z`) : fallback;
+}
+
+function revalidateTenantControl(tenantId?: string) {
+  revalidatePath("/superadmin");
+  revalidatePath("/superadmin/tenants");
+  if (tenantId) revalidatePath(`/superadmin/tenants/${tenantId}`);
+}
 
 export async function createTenantAction(formData: FormData) {
   const session = await requireSuperAdmin();
@@ -39,39 +56,65 @@ export async function createTenantAction(formData: FormData) {
 
   const passwordHash = await argon2.hash(input.password, { type: argon2.argon2id });
   const now = new Date();
-  const trialEndsAt = addDays(now, 14);
+  const periodStart = parseStart(input.membershipStart, now);
+  const defaultEnd = addDays(periodStart, input.initialStatus === "TRIAL" ? 14 : 30);
+  const periodEnd = parseEnd(input.membershipEnd, defaultEnd);
+  if (periodEnd <= periodStart) throw new Error("La fecha de vencimiento debe ser posterior al inicio");
 
-  await platformDb.$transaction(async (tx) => {
-    const tenant = await tx.tenant.create({
-      data: { name: input.name, slug: input.slug, status: "TRIAL", trialEndsAt },
+  const trialEndsAt = input.initialStatus === "TRIAL" ? periodEnd : null;
+
+  const tenant = await platformDb.$transaction(async (tx) => {
+    const createdTenant = await tx.tenant.create({
+      data: {
+        name: input.name,
+        slug: input.slug,
+        status: input.initialStatus,
+        trialEndsAt,
+      },
     });
+
     const user = await tx.user.create({
       data: { email: input.ownerEmail, name: input.ownerName, passwordHash },
     });
-    await tx.membership.create({ data: { tenantId: tenant.id, userId: user.id, role: "OWNER" } });
+
+    await tx.membership.create({
+      data: { tenantId: createdTenant.id, userId: user.id, role: "OWNER" },
+    });
+
     await tx.subscription.create({
       data: {
-        tenantId: tenant.id,
+        tenantId: createdTenant.id,
         planId: plan.id,
-        status: "TRIALING",
+        status: input.initialStatus === "ACTIVE" ? "ACTIVE" : "TRIALING",
         trialEndsAt,
-        currentPeriodStart: now,
-        currentPeriodEnd: trialEndsAt,
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
       },
     });
+
     await tx.auditLog.create({
       data: {
         scope: "PLATFORM",
+        tenantId: createdTenant.id,
         actorId: session.userId,
         action: "tenant.created",
         entityType: "Tenant",
-        entityId: tenant.id,
-        metadata: { plan: plan.code, ownerEmail: input.ownerEmail, slug: input.slug },
+        entityId: createdTenant.id,
+        metadata: {
+          plan: plan.code,
+          ownerEmail: input.ownerEmail,
+          slug: input.slug,
+          initialStatus: input.initialStatus,
+          currentPeriodStart: periodStart.toISOString(),
+          currentPeriodEnd: periodEnd.toISOString(),
+        },
       },
     });
+
+    return createdTenant;
   });
 
-  revalidatePath("/superadmin");
+  revalidateTenantControl(tenant.id);
 }
 
 export async function updateTenantStatusAction(formData: FormData) {
@@ -88,16 +131,28 @@ export async function updateTenantStatusAction(formData: FormData) {
   });
 
   await platformDb.$transaction(async (tx) => {
-    await tx.tenant.update({ where: { id: input.tenantId }, data: { status: input.status } });
+    await tx.tenant.update({
+      where: { id: input.tenantId },
+      data: {
+        status: input.status,
+        ...(input.status === "ACTIVE" ? { trialEndsAt: null } : {}),
+      },
+    });
+
     if (subscription) {
       await tx.subscription.update({
         where: { id: subscription.id },
-        data: { status: subscriptionStatusForTenant[input.status] },
+        data: {
+          status: subscriptionStatusForTenant[input.status],
+          ...(input.status === "ACTIVE" ? { trialEndsAt: null } : {}),
+        },
       });
     }
+
     await tx.auditLog.create({
       data: {
         scope: "PLATFORM",
+        tenantId: input.tenantId,
         actorId: session.userId,
         action: "tenant.status_changed",
         entityType: "Tenant",
@@ -107,7 +162,7 @@ export async function updateTenantStatusAction(formData: FormData) {
     });
   });
 
-  revalidatePath("/superadmin");
+  revalidateTenantControl(input.tenantId);
 }
 
 export async function extendTrialAction(formData: FormData) {
@@ -122,6 +177,7 @@ export async function extendTrialAction(formData: FormData) {
     where: { tenantId: input.tenantId },
     orderBy: { createdAt: "desc" },
   });
+
   const base = tenant.trialEndsAt && tenant.trialEndsAt > new Date() ? tenant.trialEndsAt : new Date();
   const trialEndsAt = addDays(base, input.days);
   const tenantStatus = tenant.status === "SUSPENDED" ? "SUSPENDED" : "TRIAL";
@@ -138,19 +194,21 @@ export async function extendTrialAction(formData: FormData) {
         },
       });
     }
+
     await tx.auditLog.create({
       data: {
         scope: "PLATFORM",
+        tenantId: input.tenantId,
         actorId: session.userId,
         action: "tenant.trial_extended",
         entityType: "Tenant",
         entityId: input.tenantId,
-        metadata: { days: input.days, trialEndsAt },
+        metadata: { days: input.days, trialEndsAt: trialEndsAt.toISOString() },
       },
     });
   });
 
-  revalidatePath("/superadmin");
+  revalidateTenantControl(input.tenantId);
 }
 
 export async function changeTenantPlanAction(formData: FormData) {
@@ -162,6 +220,7 @@ export async function changeTenantPlanAction(formData: FormData) {
     platformDb.plan.findFirst({ where: { id: input.planId, isActive: true } }),
     platformDb.subscription.findFirst({ where: { tenantId: input.tenantId }, orderBy: { createdAt: "desc" } }),
   ]);
+
   if (!tenant) throw new Error("Tenant inexistente");
   if (!plan) throw new Error("Plan inexistente o inactivo");
   if (!subscription) throw new Error("El tenant no tiene una suscripción asociada");
@@ -171,6 +230,7 @@ export async function changeTenantPlanAction(formData: FormData) {
     platformDb.auditLog.create({
       data: {
         scope: "PLATFORM",
+        tenantId: input.tenantId,
         actorId: session.userId,
         action: "subscription.plan_changed",
         entityType: "Subscription",
@@ -180,5 +240,5 @@ export async function changeTenantPlanAction(formData: FormData) {
     }),
   ]);
 
-  revalidatePath("/superadmin");
+  revalidateTenantControl(input.tenantId);
 }
