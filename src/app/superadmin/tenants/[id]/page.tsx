@@ -21,6 +21,7 @@ import {
 import { requireSuperAdmin } from "@/lib/auth";
 import { platformDb } from "@/lib/db";
 import { tenantPublicUrl } from "@/lib/hostnames";
+import { TenantOverrides } from "./tenant-overrides";
 
 type AuditMetadata = {
   amountCents?: number;
@@ -30,6 +31,19 @@ type AuditMetadata = {
   days?: number;
   currentPeriodEnd?: string;
   previousEnd?: string;
+};
+
+type PlanFeatures = {
+  maxLocations?: number;
+  maxStaff?: number;
+  maxResources?: number;
+  maxBookings?: number;
+  deposits?: boolean;
+  whatsappNotifications?: boolean;
+  advancedReports?: boolean;
+  waitlist?: boolean;
+  recurringBookings?: boolean;
+  customDomain?: boolean;
 };
 
 const statusLabels: Record<string, string> = {
@@ -78,12 +92,7 @@ export default async function SuperAdminTenantDetailPage({ params }: { params: P
   const subscription = tenant.subscriptions[0];
   const publicUrl = tenantPublicUrl(tenant.slug);
   const adminUrl = `${publicUrl}/login`;
-  const features = (subscription?.plan.features ?? {}) as {
-    maxLocations?: number;
-    maxStaff?: number;
-    maxResources?: number;
-    maxBookings?: number;
-  };
+  const features = (subscription?.plan.features ?? {}) as PlanFeatures;
 
   return (
     <div className="sa-stack">
@@ -216,8 +225,10 @@ export default async function SuperAdminTenantDetailPage({ params }: { params: P
         </aside>
       </section>
 
+      {subscription && <TenantOverrides tenantId={tenant.id} planFeatures={features} />}
+
       <section className="sa-panel">
-        <div className="sa-panel-head"><div><h2>Actividad del plano de control</h2><p>Cambios de plan, membresía, estado y cobros registrados por NanoLabs.</p></div><Layers3 size={19} /></div>
+        <div className="sa-panel-head"><div><h2>Actividad del plano de control</h2><p>Cambios de plan, membresía, estado, overrides y cobros registrados por NanoLabs.</p></div><Layers3 size={19} /></div>
         <div className="sa-audit-list">
           {audit.length ? audit.map((entry) => {
             const metadata = (entry.metadata ?? {}) as AuditMetadata;
