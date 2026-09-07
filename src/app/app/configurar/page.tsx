@@ -30,12 +30,7 @@ export default async function SetupCenterPage() {
   const settings = tenant.settings as { intervalMinutes?: number; minimumNoticeMinutes?: number; maximumAdvanceDays?: number; cancellationHours?: number };
   const theme = resolvePublicTheme(branding);
   const hasBusinessHours = rules.some((rule) => rule.ownerType === "TENANT");
-  const readySteps = [
-    Boolean(locations.length),
-    Boolean(services.length),
-    hasBusinessHours,
-    Boolean(branding.themeId || branding.primaryColor),
-  ];
+  const readySteps = [Boolean(locations.length), Boolean(services.length), hasBusinessHours, Boolean(branding.themeId || branding.primaryColor)];
   const completion = Math.round((readySteps.filter(Boolean).length / readySteps.length) * 100);
 
   return <>
@@ -46,11 +41,7 @@ export default async function SetupCenterPage() {
     </div>
 
     <section className="setup-overview card">
-      <div>
-        <span className="eyebrow">Estado de puesta a punto</span>
-        <strong>{completion}% listo</strong>
-        <p className="muted">{completion === 100 ? "La base de la agenda está configurada. Podés seguir afinando reglas e integraciones." : "Completá los puntos pendientes para dejar la reserva pública operativa."}</p>
-      </div>
+      <div><span className="eyebrow">Estado de puesta a punto</span><strong>{completion}% listo</strong><p className="muted">{completion === 100 ? "La base de la agenda está configurada. Podés seguir afinando reglas e integraciones." : "Completá los puntos pendientes para dejar la reserva pública operativa."}</p></div>
       <div className="setup-progress"><i style={{ width: `${completion}%` }} /></div>
       <div className="setup-checks">
         <SetupCheck done={locations.length > 0} label="Sede o punto de atención" />
@@ -61,18 +52,16 @@ export default async function SetupCenterPage() {
     </section>
 
     <section className="setup-path-grid">
-      <SetupCard number="1" icon={Settings2} title="Negocio" description="Reglas generales, datos públicos, clientes, formularios, bloqueos y pagos." status={`${settings.intervalMinutes ?? 30} min por intervalo`} href="/configuracion" />
-      <SetupCard number="2" icon={Building2} title="Sedes y equipo" description="Dónde atendés, quién atiende y qué recursos se pueden reservar." status={`${locations.length} sedes · ${professionals.length} profesionales · ${resources.length} recursos`} href="/servicios#infraestructura" />
+      <SetupCard number="1" icon={Settings2} title="Negocio" description="Datos generales, reglas base, clientes, formularios y bloqueos." status={`${settings.intervalMinutes ?? 30} min por intervalo`} href="/configuracion" />
+      <SetupCard number="2" icon={Building2} title="Sedes y equipo" description="Dónde atendés, quién atiende y qué recursos se pueden reservar." status={`${locations.length} sedes · ${professionals.length} profesionales · ${resources.length} recursos`} href="/estructura" />
       <SetupCard number="3" icon={Store} title="Servicios" description="Qué puede reservar el cliente, duración, precio, capacidad y asignaciones." status={`${services.length} tipos de reserva`} href="/servicios" />
-      <SetupCard number="4" icon={CalendarClock} title="Horarios" description="Jornada general y excepciones por sede, profesional o recurso." status={`${rules.length} bloques activos`} href="/disponibilidad" />
+      <SetupCard number="4" icon={CalendarClock} title="Horarios" description="Jornada general y reglas por sede, profesional o recurso." status={`${rules.length} bloques activos`} href="/disponibilidad" />
       <SetupCard number="5" icon={BadgeCheck} title="Reglas" description="Anticipación, cancelación, reprogramación y políticas específicas por servicio." status={`${settings.cancellationHours ?? 0} h cancelación general`} href="/politicas" />
       <SetupCard number="6" icon={Palette} title="Apariencia" description="Tema, colores y experiencia visual de la PWA pública." status={theme.name} href="/apariencia" />
-      <SetupCard number="7" icon={Wrench} title="Integraciones" description="Mercado Pago, calendarios, automatizaciones, dominio y recursos externos." status="Configuración avanzada" href="/configuracion" />
+      <SetupCard number="7" icon={Wrench} title="Integraciones" description="Mercado Pago, dominio, calendarios y automatizaciones." status="Conexiones externas" href="/configuracion?tab=payments" />
     </section>
 
-    <div className="platform-toolbar setup-toolbar">
-      <div><h2>Acciones rápidas</h2><span className="muted">Las tareas más comunes de alta sin salir del configurador.</span></div>
-    </div>
+    <div className="platform-toolbar setup-toolbar"><div><h2>Acciones rápidas</h2><span className="muted">Las tareas más comunes de alta sin salir del configurador.</span></div></div>
 
     <section className="setup-quick-grid">
       <form action={createLocationAction} className="card setup-quick-card">
@@ -85,7 +74,7 @@ export default async function SetupCenterPage() {
       <form action={createProfessionalAction} className="card setup-quick-card">
         <div className="setup-quick-head"><Users size={18} /><div><strong>Nuevo profesional</strong><small>Persona que puede ser asignada a reservas.</small></div></div>
         <input className="input" name="name" placeholder="Nombre del profesional" required />
-        <select className="select" name="locationId" defaultValue=""><option value="">Sin sede fija</option>{locations.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select>
+        <select className="select" name="locationId" defaultValue=""><option value="">Sin sede fija</option>{locations.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}</select>
         <input name="color" type="hidden" value="#2563eb" />
         <button className="button secondary">Agregar profesional</button>
       </form>
@@ -94,7 +83,7 @@ export default async function SetupCenterPage() {
         <div className="setup-quick-head"><Wrench size={18} /><div><strong>Nuevo recurso</strong><small>Sala, box, cancha, equipo, vehículo o activo.</small></div></div>
         <input className="input" name="name" placeholder="Nombre del recurso" required />
         <div className="grid" style={{ gridTemplateColumns: "1fr 100px", gap: 8 }}><input className="input" name="type" placeholder="Tipo" /><input className="input" name="capacity" type="number" min="1" defaultValue="1" aria-label="Capacidad" /></div>
-        <select className="select" name="locationId" defaultValue=""><option value="">Sin sede fija</option>{locations.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select>
+        <select className="select" name="locationId" defaultValue=""><option value="">Sin sede fija</option>{locations.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}</select>
         <input name="color" type="hidden" value="#10b981" />
         <button className="button secondary">Agregar recurso</button>
       </form>
@@ -110,7 +99,7 @@ export default async function SetupCenterPage() {
     </section>
 
     <section className="card setup-advanced-card">
-      <div><span className="eyebrow">Después de la puesta a punto</span><h2>Funciones avanzadas siguen intactas</h2><p className="muted">Clases, recurrencias, lista de espera, extras, paquetes, automatizaciones, calendarios y reportes no desaparecen: quedan en “Más herramientas” porque son operación o expansión, no configuración inicial.</p></div>
+      <div><span className="eyebrow">Después de la puesta a punto</span><h2>Funciones avanzadas siguen intactas</h2><p className="muted">Clases, recurrencias, lista de espera, extras, paquetes, automatizaciones, calendarios y reportes quedan en “Más herramientas” porque son operación o expansión, no configuración inicial.</p></div>
       <Link className="button secondary" href="/agenda">Ir a la agenda <ArrowRight size={15} /></Link>
     </section>
   </>;
@@ -121,8 +110,5 @@ function SetupCheck({ done, label }: { done: boolean; label: string }) {
 }
 
 function SetupCard({ number, icon: Icon, title, description, status, href }: { number: string; icon: React.ComponentType<{ size?: number }>; title: string; description: string; status: string; href: string }) {
-  return <Link href={href} className="setup-path-card card">
-    <span className="setup-path-number">{number}</span><span className="setup-path-icon"><Icon size={18} /></span>
-    <div><strong>{title}</strong><p>{description}</p><small>{status}</small></div><ArrowRight className="setup-path-arrow" size={16} />
-  </Link>;
+  return <Link href={href} className="setup-path-card card"><span className="setup-path-number">{number}</span><span className="setup-path-icon"><Icon size={18} /></span><div><strong>{title}</strong><p>{description}</p><small>{status}</small></div><ArrowRight className="setup-path-arrow" size={16} /></Link>;
 }
