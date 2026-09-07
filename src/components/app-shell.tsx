@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BadgeCheck,
   BarChart3,
   BellRing,
   BriefcaseBusiness,
@@ -35,6 +36,7 @@ const tenantLinks = [
   { href: "/clientes", internal: "/app/clientes", label: "Clientes / CRM", icon: Users },
   { href: "/servicios", internal: "/app/catalogo", label: "Servicios y equipo", icon: BriefcaseBusiness },
   { href: "/extras", internal: "/app/extras", label: "Extras", icon: Sparkles },
+  { href: "/paquetes", internal: "/app/paquetes", label: "Paquetes y membresías", icon: BadgeCheck },
   { href: "/disponibilidad", internal: "/app/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
   { href: "/politicas", internal: "/app/politicas", label: "Políticas", icon: SlidersHorizontal },
   { href: "/automatizaciones", internal: "/app/automatizaciones", label: "Automatizaciones", icon: BellRing },
