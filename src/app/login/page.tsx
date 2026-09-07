@@ -2,8 +2,9 @@ import { CalendarCheck2 } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { LoginForm } from "./login-form";
-import { findTenantOwnership, getRequestHostname, tenantHasOperationalAccess } from "@/lib/tenant-context";
+import { findTenantOwnership, getRequestHostname } from "@/lib/tenant-context";
 import { isPlatformHostname } from "@/lib/hostnames";
+import { reconcileTenantMembership } from "@/lib/membership";
 
 export default async function LoginPage() {
   const hostname = await getRequestHostname();
@@ -11,7 +12,9 @@ export default async function LoginPage() {
 
   const tenant = await findTenantOwnership(hostname);
   if (!tenant || tenant.isPlatform) notFound();
-  if (!tenantHasOperationalAccess(tenant)) redirect("/suspendido");
+
+  const access = await reconcileTenantMembership(tenant.id);
+  if (!access?.allowed) redirect("/suspendido");
 
   const session = await getSession();
   if (session?.tenantId === tenant.id) redirect("/dashboard");
