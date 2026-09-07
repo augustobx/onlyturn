@@ -4,10 +4,12 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { platformDb } from "./db";
 import { getAvailableSlots, getPublicTenant } from "./booking-service";
+import { getCustomerSession } from "./customer-auth";
 import { normalizeEmail, normalizePhone, randomToken, sha256 } from "./security";
 import { assertPlanCapacity } from "./plans";
 import { decryptPaymentCredentials } from "./payment-crypto";
 import { createMercadoPagoCheckout, type MercadoPagoCredentials } from "./payments/mercadopago";
+import { consumeCustomerPackage, restorePackageUsageForBooking } from "./packages";
 import { resolveServiceAddons } from "./service-addons";
 
 export const publicBookingSchema = z.object({
@@ -18,6 +20,7 @@ export const publicBookingSchema = z.object({
   resourceId: z.string().optional(),
   sessionId: z.string().optional(),
   addonIds: z.array(z.string()).default([]),
+  customerPackageId: z.string().optional(),
   startsAt: z.iso.datetime().optional(),
   partySize: z.coerce.number().int().min(1).max(1000).default(1),
   firstName: z.string().trim().min(2).max(80),
@@ -103,27 +106,60 @@ export async function createPublicBooking(raw: unknown) {
     .map((field) => ({ customFieldId: field.id, value: input.customValues[field.id] as Prisma.InputJsonValue }));
 
   const normalizedPhone = normalizePhone(input.phone);
-  const customer = await platformDb.customer.upsert({
-    where: { tenantId_normalizedPhone: { tenantId: tenant.id, normalizedPhone } },
-    create: {
-      tenantId: tenant.id,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      phone: input.phone,
-      normalizedPhone,
-      email: input.email || null,
-      normalizedEmail: normalizeEmail(input.email),
-    },
-    update: {
-      firstName: input.firstName,
-      lastName: input.lastName,
-      email: input.email || null,
-      normalizedEmail: normalizeEmail(input.email),
-    },
-  });
+  const customerSession = input.customerPackageId ? await getCustomerSession(tenant.id) : null;
+  if (input.customerPackageId && !customerSession) throw new Error("Ingresá a tu cuenta para usar un paquete o membresía");
+  if (customerSession && normalizePhone(customerSession.account.customer.phone) !== normalizedPhone) {
+    throw new Error("El paquete pertenece a tu cuenta. Usá el teléfono asociado a esa cuenta.");
+  }
+
+  const customer = customerSession
+    ? await platformDb.customer.update({
+        where: { id: customerSession.account.customerId },
+        data: {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email || customerSession.account.email,
+          normalizedEmail: normalizeEmail(input.email || customerSession.account.email),
+        },
+      })
+    : await platformDb.customer.upsert({
+        where: { tenantId_normalizedPhone: { tenantId: tenant.id, normalizedPhone } },
+        create: {
+          tenantId: tenant.id,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          phone: input.phone,
+          normalizedPhone,
+          email: input.email || null,
+          normalizedEmail: normalizeEmail(input.email),
+        },
+        update: {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email || null,
+          normalizedEmail: normalizeEmail(input.email),
+        },
+      });
+
+  if (input.customerPackageId) {
+    const membership = await platformDb.customerPackage.findFirst({
+      where: {
+        id: input.customerPackageId,
+        tenantId: tenant.id,
+        customerId: customer.id,
+        status: "ACTIVE",
+        remainingUses: { gte: input.partySize },
+        startsAt: { lte: new Date() },
+        OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
+        package: { services: { some: { serviceId: service.id } } },
+      },
+      select: { id: true },
+    });
+    if (!membership) throw new Error("El paquete elegido ya no está disponible para este servicio");
+  }
 
   const paymentPolicy = (service.depositPolicy ?? {}) as PaymentPolicy;
-  const payableAmountCents = finalPriceCents ?? 0;
+  const payableAmountCents = input.customerPackageId ? addonPriceCents : (finalPriceCents ?? 0);
   const paymentRequired = Boolean(paymentPolicy.enabled && payableAmountCents > 0 && paymentPolicy.provider === "MERCADOPAGO");
   const paymentAmountCents = paymentRequired
     ? Math.max(1, Math.round(payableAmountCents * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100)))
@@ -144,6 +180,7 @@ export async function createPublicBooking(raw: unknown) {
           locationId: input.locationId,
           sessionId: input.sessionId,
           partySize: input.partySize,
+          customerPackageId: input.customerPackageId,
           publicTokenHash: sha256(publicToken),
           priceCents: finalPriceCents,
           paymentRequired,
@@ -156,6 +193,7 @@ export async function createPublicBooking(raw: unknown) {
           customerId: customer.id,
           service,
           input,
+          customerPackageId: input.customerPackageId,
           publicTokenHash: sha256(publicToken),
           priceCents: finalPriceCents,
           paymentRequired,
@@ -200,13 +238,14 @@ export async function createPublicBooking(raw: unknown) {
       await platformDb.paymentTransaction.update({ where: { id: transaction.id }, data: { preferenceId: checkout.preferenceId, checkoutUrl: checkout.checkoutUrl } });
       return { bookingId: booking.id, token: publicToken, paymentRequired: true, checkoutUrl: checkout.checkoutUrl, amountCents: paymentAmountCents };
     } catch (error) {
-      await platformDb.$transaction([
-        platformDb.paymentTransaction.update({ where: { id: transaction.id }, data: { status: "FAILED", rawStatus: "preference_error" } }),
-        platformDb.booking.update({
+      await platformDb.$transaction(async (tx) => {
+        await tx.paymentTransaction.update({ where: { id: transaction.id }, data: { status: "FAILED", rawStatus: "preference_error" } });
+        await tx.booking.update({
           where: { id: booking.id },
           data: { status: "CANCELLED", consumesCapacity: false, paymentStatus: "FAILED", cancellationReason: "No se pudo iniciar el pago", cancelledAt: new Date() },
-        }),
-      ]);
+        });
+        await restorePackageUsageForBooking(tx, tenant.id, booking.id);
+      });
       throw error;
     }
   } catch (error) {
@@ -220,6 +259,7 @@ async function createPublicTimedBooking({
   customerId,
   service,
   input,
+  customerPackageId,
   publicTokenHash,
   priceCents,
   paymentRequired,
@@ -232,6 +272,7 @@ async function createPublicTimedBooking({
   customerId: string;
   service: TimedService;
   input: z.infer<typeof publicBookingSchema>;
+  customerPackageId?: string;
   publicTokenHash: string;
   priceCents: number | null;
   paymentRequired: boolean;
@@ -295,6 +336,7 @@ async function createPublicTimedBooking({
           paymentRequired,
           partySize: input.partySize,
           addonIds: input.addonIds,
+          customerPackageId: customerPackageId ?? null,
           assignmentStrategy: service.assignmentStrategy,
           professionalId: resolved.professionalId ?? null,
           resourceId: resolved.resourceId ?? null,
@@ -316,6 +358,9 @@ async function createPublicTimedBooking({
           durationMinutes: addon.durationMinutes,
         })),
       });
+    }
+    if (customerPackageId) {
+      await consumeCustomerPackage(tx, { tenantId, customerId, customerPackageId, serviceId: service.id, bookingId: booking.id, uses: input.partySize });
     }
     return booking;
   }, { isolationLevel: "Serializable" });
@@ -398,6 +443,7 @@ async function createPublicSessionBooking({
   locationId,
   sessionId,
   partySize,
+  customerPackageId,
   publicTokenHash,
   priceCents,
   paymentRequired,
@@ -411,6 +457,7 @@ async function createPublicSessionBooking({
   locationId: string;
   sessionId?: string;
   partySize: number;
+  customerPackageId?: string;
   publicTokenHash: string;
   priceCents: number | null;
   paymentRequired: boolean;
@@ -470,7 +517,7 @@ async function createPublicSessionBooking({
         tenantId,
         bookingId: booking.id,
         action: "CREATED",
-        toState: { status: booking.status, origin: "PUBLIC", sessionId: session.id, partySize, paymentRequired, addonIds: addons.map((addon) => addon.addonId) },
+        toState: { status: booking.status, origin: "PUBLIC", sessionId: session.id, partySize, paymentRequired, customerPackageId: customerPackageId ?? null, addonIds: addons.map((addon) => addon.addonId) },
       },
     });
     if (customValues.length) {
@@ -488,6 +535,9 @@ async function createPublicSessionBooking({
           durationMinutes: 0,
         })),
       });
+    }
+    if (customerPackageId) {
+      await consumeCustomerPackage(tx, { tenantId, customerId, customerPackageId, serviceId, bookingId: booking.id, uses: partySize });
     }
     return booking;
   }, { isolationLevel: "Serializable" });
