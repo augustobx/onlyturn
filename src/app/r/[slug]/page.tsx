@@ -39,7 +39,8 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
   const customerPackages = customerSession ? await getCustomerUsablePackages(tenant.id, customerSession.account.customerId) : [];
   const branding = tenant.branding as PublicBranding;
   const publicTheme = resolvePublicTheme(branding);
-  const settings = tenant.settings as { cancellationHours?: number };
+  const settings = tenant.settings as { cancellationHours?: number; customerRegistrationEnabled?: boolean };
+  const registrationRequired = Boolean(settings.customerRegistrationEnabled && !customerSession);
 
   return <main
     className="booking-page booking-page-v2"
@@ -65,30 +66,46 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
     <div className="public-hero"><div className="booking-wrap"><div className="public-brand-v2">
       {branding.logoUrl ? <img src={branding.logoUrl} alt={`Logo de ${tenant.name}`} /> : <div className="logo">{tenant.name[0]}</div>}
       <div><h1>{tenant.name}</h1><p>{branding.description ?? "Reservá tu turno en pocos minutos"}</p></div>
-      <a className="public-account-link" href={customerSession ? "/mi-cuenta" : "/cuenta"}>{customerSession ? `Hola, ${customerSession.account.customer.firstName}` : "Ingresar / registrarme"}</a>
+      <a className="public-account-link" href={customerSession ? "/mi-cuenta" : "/cuenta"}>{customerSession ? `Hola, ${customerSession.account.customer.firstName}` : "Ingresar"}</a>
     </div></div></div>
     <div className="booking-wrap booking-content-v2">
-      <BookingWizard
-        slug={slug}
-        currency={tenant.currency}
-        timezone={tenant.timezone}
-        cancellationHours={settings.cancellationHours ?? 12}
-        locations={locations}
-        services={services}
-        packages={customerPackages.map((membership) => ({
-          id: membership.id,
-          name: membership.name,
-          remainingUses: membership.remainingUses,
-          expiresAt: membership.expiresAt?.toISOString() ?? null,
-          serviceIds: membership.package.services.map((link) => link.serviceId),
-        }))}
-        customer={customerSession ? {
-          firstName: customerSession.account.customer.firstName,
-          lastName: customerSession.account.customer.lastName ?? "",
-          phone: customerSession.account.customer.phone,
-          email: customerSession.account.email,
-        } : undefined}
-      />
+      {registrationRequired ? (
+        <section className="registration-welcome card">
+          <span className="registration-welcome-badge">Bienvenido</span>
+          <h2>Te damos la bienvenida a {tenant.name}</h2>
+          <p className="registration-welcome-description">{branding.description ?? `Desde acá vas a poder conocer los servicios disponibles de ${tenant.name}, consultar horarios y gestionar tus reservas.`}</p>
+          <div className="registration-welcome-notice">
+            <strong>Para acceder a los servicios necesitás una cuenta.</strong>
+            <span>Registrate una sola vez y después vas a poder reservar, consultar tus turnos y administrar tu información desde la PWA.</span>
+          </div>
+          <div className="registration-welcome-actions">
+            <a className="button registration-primary" href="/registro">Crear mi cuenta</a>
+            <a className="button secondary registration-secondary" href="/cuenta">Ya tengo una cuenta</a>
+          </div>
+        </section>
+      ) : (
+        <BookingWizard
+          slug={slug}
+          currency={tenant.currency}
+          timezone={tenant.timezone}
+          cancellationHours={settings.cancellationHours ?? 12}
+          locations={locations}
+          services={services}
+          packages={customerPackages.map((membership) => ({
+            id: membership.id,
+            name: membership.name,
+            remainingUses: membership.remainingUses,
+            expiresAt: membership.expiresAt?.toISOString() ?? null,
+            serviceIds: membership.package.services.map((link) => link.serviceId),
+          }))}
+          customer={customerSession ? {
+            firstName: customerSession.account.customer.firstName,
+            lastName: customerSession.account.customer.lastName ?? "",
+            phone: customerSession.account.customer.phone,
+            email: customerSession.account.email,
+          } : undefined}
+        />
+      )}
       {experience.gallery.length > 0 && <section className="public-gallery"><h2>Conocé nuestro espacio</h2><div>{experience.gallery.map((item) => <img src={item.publicUrl} alt={item.altText ?? tenant.name} key={item.id} />)}</div></section>}
       <p className="muted" style={{ textAlign: "center", fontSize: 11, marginTop: 22 }}>Agenda gestionada con <strong>OnlyTurn</strong> · NanoLabs</p>
     </div>
