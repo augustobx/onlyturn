@@ -4,16 +4,18 @@ El navegador nunca es autoridad para elegir un tenant administrativo. La sesión
 
 ## Namespace de hosts
 
-OnlyTurn utiliza un namespace exclusivo dentro de la infraestructura NanoLabs:
+NanoLabs usa un namespace compartido para todos los SaaS:
 
 ```text
-onlyturn.nanoapps.ar
-<slug>.onlyturn.nanoapps.ar
+onlyturn.nanoapps.ar        -> plataforma / SuperAdmin de OnlyTurn
+<slug>.nanoapps.ar          -> tenant, despachado por nanoapps-router
 ```
 
-No se admite `<slug>.nanoapps.ar`. Esto evita colisiones con OnlyFood, OnlyMob, OnlyGym y otros productos que comparten `nanoapps.ar`.
+El wildcard `*.nanoapps.ar` llega al `nanoapps-router` central. El router consulta el endpoint `/api/internal/caddy/ask?domain=<hostname>` de cada SaaS y reenvía la petición al servicio que responde `204` indicando que ese hostname le pertenece.
 
-La normalización y extracción de host vive en `src/lib/hostnames.ts`; `src/proxy.ts` solamente reescribe hosts válidos del producto.
+OnlyTurn no decide qué SaaS recibe primero el hostname: únicamente valida si el slug solicitado existe en su propia base y está activo o en trial. Por eso el namespace de slugs debe mantenerse sin colisiones entre productos.
+
+La normalización y extracción de host vive en `src/lib/hostnames.ts`; `src/proxy.ts` reescribe el hostname tenant válido a la experiencia pública correspondiente.
 
 Los dominios personalizados se consideran válidos únicamente cuando el registro `CustomDomain` está verificado. Hasta completar el flujo end-to-end de validación/DNS, la feature permanece deshabilitada en los planes productivos.
 
@@ -30,5 +32,5 @@ El acceso global usa `platformDb` y se limita a servicios de plataforma, autenti
 - comprobar que búsquedas por teléfono permiten el mismo valor en tenants distintos;
 - verificar que SuperAdmin no obtiene implícitamente una membresía tenant;
 - ejecutar dos inserts solapados y comprobar que PostgreSQL acepta solo uno;
-- comprobar que `cliente.nanoapps.ar` no resuelve un tenant de OnlyTurn;
-- comprobar que `cliente.onlyturn.nanoapps.ar` sí resuelve únicamente el tenant `cliente`.
+- comprobar que `cliente.nanoapps.ar` devuelve `204` en `/api/internal/caddy/ask` solo si `cliente` pertenece a OnlyTurn;
+- comprobar que un slug inexistente devuelve `404` para que el router pueda probar el siguiente SaaS.
