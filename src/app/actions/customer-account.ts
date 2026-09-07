@@ -10,6 +10,7 @@ import { platformDb } from "@/lib/db";
 import { getPublicTenant } from "@/lib/booking-service";
 import { normalizeEmail, normalizePhone } from "@/lib/security";
 import { customerRegistrationStatus } from "@/lib/customer-accounts";
+import { restorePackageUsageForBooking } from "@/lib/packages";
 
 export type CustomerAuthState = { error?: string };
 const credentials = z.object({ slug: z.string().min(1), email: z.email(), password: z.string().min(8).max(200) });
@@ -89,11 +90,12 @@ export async function cancelCustomerBookingAction(formData: FormData) {
   const deadline = new Date(booking.startsAt.getTime() - cancellationHours * 3_600_000);
   if (new Date() > deadline) throw new Error(`La cancelación online requiere al menos ${cancellationHours} hora(s) de anticipación`);
 
-  await platformDb.$transaction([
-    platformDb.booking.update({ where: { id: booking.id }, data: { status: "CANCELLED", consumesCapacity: false, cancelledAt: new Date(), cancellationReason: "Cancelada por el cliente desde Mi cuenta" } }),
-    platformDb.bookingHistory.create({ data: { tenantId: tenant.id, bookingId: booking.id, action: "CUSTOMER_CANCELLED", fromState: { status: booking.status }, toState: { status: "CANCELLED", cancellationHours } } }),
-    platformDb.auditLog.create({ data: { scope: "TENANT", tenantId: tenant.id, action: "booking.customer_cancelled", entityType: "Booking", entityId: booking.id } }),
-  ]);
+  await platformDb.$transaction(async (tx) => {
+    await tx.booking.update({ where: { id: booking.id }, data: { status: "CANCELLED", consumesCapacity: false, cancelledAt: new Date(), cancellationReason: "Cancelada por el cliente desde Mi cuenta" } });
+    const packageRestored = await restorePackageUsageForBooking(tx, tenant.id, booking.id);
+    await tx.bookingHistory.create({ data: { tenantId: tenant.id, bookingId: booking.id, action: "CUSTOMER_CANCELLED", fromState: { status: booking.status }, toState: { status: "CANCELLED", cancellationHours, packageRestored } } });
+    await tx.auditLog.create({ data: { scope: "TENANT", tenantId: tenant.id, action: "booking.customer_cancelled", entityType: "Booking", entityId: booking.id, metadata: { packageRestored } } });
+  });
   revalidatePath(`/r/${tenant.slug}/mi-cuenta`);
   revalidatePath("/mi-cuenta");
 }
