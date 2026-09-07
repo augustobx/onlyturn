@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 15
     env:
       DATABASE_URL: postgresql://onlyturn:ci_only@127.0.0.1:5432/onlyturn?schema=public
-      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ci-onlyturn-server-actions-key-not-for-production
+      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       COOKIE_SECURE: "false"
     steps:
       - uses: actions/checkout@v4
