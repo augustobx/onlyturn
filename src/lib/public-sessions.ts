@@ -1,8 +1,10 @@
 import "server-only";
 
 import { platformDb } from "./db";
+import { expirePendingBookingPayments } from "./payment-expiry";
 
 export async function getPublicSessions(input: { tenantId: string; locationId: string; serviceId: string }) {
+  await expirePendingBookingPayments(input.tenantId);
   const tenant = await platformDb.tenant.findUniqueOrThrow({ where: { id: input.tenantId }, select: { settings: true } });
   const settings = tenant.settings as { maximumAdvanceDays?: number };
   const maxDate = new Date(Date.now() + (settings.maximumAdvanceDays ?? 60) * 86_400_000);
