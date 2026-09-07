@@ -10,10 +10,6 @@ export function tenantBaseDomain(): string {
   return normalizeHostname(process.env.TENANT_BASE_DOMAIN || "nanoapps.ar");
 }
 
-export function tenantRootDomain(): string {
-  return `onlyturn.${tenantBaseDomain()}`;
-}
-
 export function isLocalHostname(rawHostname: string): boolean {
   const hostname = normalizeHostname(rawHostname);
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".localhost");
@@ -26,7 +22,7 @@ export function isPlatformHostname(rawHostname: string): boolean {
 
 export function tenantSlugFromHostname(rawHostname: string): string | null {
   const hostname = normalizeHostname(rawHostname);
-  const suffix = `.${tenantRootDomain()}`;
+  const suffix = `.${tenantBaseDomain()}`;
 
   if (!hostname.endsWith(suffix)) return null;
 
@@ -37,5 +33,5 @@ export function tenantSlugFromHostname(rawHostname: string): string | null {
 }
 
 export function tenantPublicUrl(slug: string): string {
-  return `https://${slug}.${tenantRootDomain()}`;
+  return `https://${slug}.${tenantBaseDomain()}`;
 }
