@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getPublicTenant } from "@/lib/booking-service";
 import { getPublicSessions } from "@/lib/public-sessions";
+import { assertPublicCustomerAccess } from "@/lib/public-customer-access";
 
 const query = z.object({
   locationId: z.string().min(1),
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { slug } = await params;
     const tenant = await getPublicTenant(slug);
     if (!tenant) return NextResponse.json({ error: "Agenda no disponible" }, { status: 404 });
+    await assertPublicCustomerAccess(tenant);
     const parsed = query.parse(Object.fromEntries(request.nextUrl.searchParams));
     const sessions = await getPublicSessions({ tenantId: tenant.id, ...parsed });
     return NextResponse.json({
@@ -23,6 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       })),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Solicitud inválida" }, { status: 400 });
+    const message = error instanceof Error ? error.message : "Solicitud inválida";
+    return NextResponse.json({ error: message }, { status: message.startsWith("Necesitás registrarte") ? 401 : 400 });
   }
 }
