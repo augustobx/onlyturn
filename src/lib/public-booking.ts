@@ -4,11 +4,11 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { platformDb } from "./db";
 import { getAvailableSlots, getPublicTenant } from "./booking-service";
-import { createTenantDb } from "./tenant-db";
 import { normalizeEmail, normalizePhone, randomToken, sha256 } from "./security";
 import { assertPlanCapacity } from "./plans";
 import { decryptPaymentCredentials } from "./payment-crypto";
 import { createMercadoPagoCheckout, type MercadoPagoCredentials } from "./payments/mercadopago";
+import { resolveServiceAddons } from "./service-addons";
 
 export const publicBookingSchema = z.object({
   tenantSlug: z.string(),
@@ -17,6 +17,7 @@ export const publicBookingSchema = z.object({
   professionalId: z.string().optional(),
   resourceId: z.string().optional(),
   sessionId: z.string().optional(),
+  addonIds: z.array(z.string()).default([]),
   startsAt: z.iso.datetime().optional(),
   partySize: z.coerce.number().int().min(1).max(1000).default(1),
   firstName: z.string().trim().min(2).max(80),
@@ -32,6 +33,14 @@ type PaymentPolicy = {
   percent?: number;
   holdMinutes?: number;
   provider?: string;
+};
+
+type AddonSnapshot = {
+  addonId: string;
+  name: string;
+  priceCents: number;
+  durationMinutes: number;
+  preparationMinutes: number;
 };
 
 function customFieldValueIsEmpty(value: unknown) {
@@ -54,6 +63,22 @@ export async function createPublicBooking(raw: unknown) {
   });
   if (!service.locations.some((item) => item.locationId === input.locationId)) throw new Error("Este servicio no está disponible en la sede seleccionada");
   if (input.partySize < service.minPartySize || input.partySize > service.maxPartySize) throw new Error(`La reserva admite entre ${service.minPartySize} y ${service.maxPartySize} asistente(s)`);
+
+  const addons = await resolveServiceAddons(tenant.id, service.id, input.addonIds);
+  if ((service.bookingType === "CLASS" || service.bookingType === "EVENT") && addons.some((addon) => addon.durationMinutes || addon.preparationMinutes)) {
+    throw new Error("Uno de los extras seleccionados modifica duración y no es compatible con una sesión programada");
+  }
+  const addonSnapshots: AddonSnapshot[] = addons.map((addon) => ({
+    addonId: addon.id,
+    name: addon.name,
+    priceCents: addon.priceCents,
+    durationMinutes: addon.durationMinutes,
+    preparationMinutes: addon.preparationMinutes,
+  }));
+  const addonPriceCents = addonSnapshots.reduce((sum, addon) => sum + addon.priceCents, 0);
+  const finalPriceCents = service.priceCents == null && addonPriceCents === 0
+    ? null
+    : (service.priceCents ?? 0) * input.partySize + addonPriceCents;
 
   const customFields = await platformDb.customField.findMany({
     where: { tenantId: tenant.id, isActive: true, OR: [{ serviceId: null }, { serviceId: service.id }] },
@@ -86,10 +111,10 @@ export async function createPublicBooking(raw: unknown) {
   });
 
   const paymentPolicy = (service.depositPolicy ?? {}) as PaymentPolicy;
-  const paymentRequired = Boolean(paymentPolicy.enabled && service.priceCents && service.priceCents > 0 && paymentPolicy.provider === "MERCADOPAGO");
-  const baseAmountCents = (service.priceCents ?? 0) * input.partySize;
+  const payableAmountCents = finalPriceCents ?? 0;
+  const paymentRequired = Boolean(paymentPolicy.enabled && payableAmountCents > 0 && paymentPolicy.provider === "MERCADOPAGO");
   const paymentAmountCents = paymentRequired
-    ? Math.max(1, Math.round(baseAmountCents * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100)))
+    ? Math.max(1, Math.round(payableAmountCents * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100)))
     : 0;
   const paymentConnection = paymentRequired
     ? await platformDb.paymentProviderConnection.findUnique({ where: { tenantId_provider: { tenantId: tenant.id, provider: "MERCADOPAGO" } } })
@@ -108,10 +133,11 @@ export async function createPublicBooking(raw: unknown) {
           sessionId: input.sessionId,
           partySize: input.partySize,
           publicTokenHash: sha256(publicToken),
-          priceCents: service.priceCents == null ? null : service.priceCents * input.partySize,
+          priceCents: finalPriceCents,
           paymentRequired,
           paymentAmountCents,
           customValues,
+          addons: addonSnapshots,
         })
       : await createPublicTimedBooking({
           tenantId: tenant.id,
@@ -119,10 +145,11 @@ export async function createPublicBooking(raw: unknown) {
           service,
           input,
           publicTokenHash: sha256(publicToken),
-          priceCents: service.priceCents == null ? null : service.priceCents * input.partySize,
+          priceCents: finalPriceCents,
           paymentRequired,
           paymentAmountCents,
           customValues,
+          addons: addonSnapshots,
           timezone: tenant.timezone,
         });
 
@@ -186,6 +213,7 @@ async function createPublicTimedBooking({
   paymentRequired,
   paymentAmountCents,
   customValues,
+  addons,
   timezone,
 }: {
   tenantId: string;
@@ -206,6 +234,7 @@ async function createPublicTimedBooking({
   paymentRequired: boolean;
   paymentAmountCents: number;
   customValues: Array<{ customFieldId: string; value: Prisma.InputJsonValue }>;
+  addons: AddonSnapshot[];
   timezone: string;
 }) {
   if (!input.startsAt) throw new Error("Elegí un horario");
@@ -214,6 +243,10 @@ async function createPublicTimedBooking({
   if (service.professionalMode === "REQUIRED" && !input.professionalId) throw new Error("Seleccioná un profesional");
   if (service.resourceMode === "REQUIRED" && !input.resourceId) throw new Error("Seleccioná un recurso");
 
+  const addonDuration = addons.reduce((sum, addon) => sum + addon.durationMinutes, 0);
+  const addonPreparation = addons.reduce((sum, addon) => sum + addon.preparationMinutes, 0);
+  const effectiveDurationMinutes = service.durationMinutes + addonDuration;
+  const effectivePreparationMinutes = service.preparationMinutes + addonPreparation;
   const startsAt = new Date(input.startsAt);
   const date = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(startsAt);
   const slots = await getAvailableSlots({
@@ -222,35 +255,61 @@ async function createPublicTimedBooking({
     serviceId: input.serviceId,
     professionalId: input.professionalId,
     resourceId: input.resourceId,
+    addonIds: input.addonIds,
     date,
   });
   if (!slots.some((slot) => slot.startsAt.getTime() === startsAt.getTime())) throw new Error("Ese horario ya no está disponible");
 
-  return createTenantDb(tenantId).createBooking({
-    tenantId,
-    locationId: input.locationId,
-    serviceId: service.id,
-    customerId,
-    professionalId: input.professionalId || null,
-    resourceId: input.resourceId || null,
-    partySize: input.partySize,
-    startsAt,
-    endsAt: new Date(startsAt.getTime() + service.durationMinutes * 60_000),
-    capacityStartsAt: new Date(startsAt.getTime() - service.preparationMinutes * 60_000),
-    capacityEndsAt: new Date(startsAt.getTime() + (service.durationMinutes + service.bufferMinutes) * 60_000),
-    durationMinutes: service.durationMinutes,
-    priceCents,
-    status: paymentRequired ? "PENDING" : "CONFIRMED",
-    paymentStatus: paymentRequired ? "PENDING" : "NOT_REQUIRED",
-    paymentAmountCents,
-    origin: "PUBLIC",
-    publicTokenHash,
-  }, {
-    tenantId,
-    bookingId: "pending",
-    action: "CREATED",
-    toState: { status: paymentRequired ? "PENDING" : "CONFIRMED", origin: "PUBLIC", paymentRequired, partySize: input.partySize },
-  }, customValues);
+  const endsAt = new Date(startsAt.getTime() + effectiveDurationMinutes * 60_000);
+  return platformDb.$transaction(async (tx) => {
+    const booking = await tx.booking.create({
+      data: {
+        tenantId,
+        locationId: input.locationId,
+        serviceId: service.id,
+        customerId,
+        professionalId: input.professionalId || null,
+        resourceId: input.resourceId || null,
+        partySize: input.partySize,
+        startsAt,
+        endsAt,
+        capacityStartsAt: new Date(startsAt.getTime() - effectivePreparationMinutes * 60_000),
+        capacityEndsAt: new Date(endsAt.getTime() + service.bufferMinutes * 60_000),
+        durationMinutes: effectiveDurationMinutes,
+        priceCents,
+        status: paymentRequired ? "PENDING" : "CONFIRMED",
+        paymentStatus: paymentRequired ? "PENDING" : "NOT_REQUIRED",
+        paymentAmountCents,
+        origin: "PUBLIC",
+        publicTokenHash,
+      },
+    });
+    await tx.bookingHistory.create({
+      data: {
+        tenantId,
+        bookingId: booking.id,
+        action: "CREATED",
+        toState: { status: booking.status, origin: "PUBLIC", paymentRequired, partySize: input.partySize, addonIds: input.addonIds },
+      },
+    });
+    if (customValues.length) {
+      await tx.customFieldValue.createMany({ data: customValues.map((entry) => ({ tenantId, bookingId: booking.id, customFieldId: entry.customFieldId, value: entry.value })) });
+    }
+    if (addons.length) {
+      await tx.bookingAddon.createMany({
+        data: addons.map((addon) => ({
+          tenantId,
+          bookingId: booking.id,
+          addonId: addon.addonId,
+          name: addon.name,
+          quantity: 1,
+          priceCents: addon.priceCents,
+          durationMinutes: addon.durationMinutes,
+        })),
+      });
+    }
+    return booking;
+  }, { isolationLevel: "Serializable" });
 }
 
 async function createPublicSessionBooking({
@@ -265,6 +324,7 @@ async function createPublicSessionBooking({
   paymentRequired,
   paymentAmountCents,
   customValues,
+  addons,
 }: {
   tenantId: string;
   customerId: string;
@@ -277,6 +337,7 @@ async function createPublicSessionBooking({
   paymentRequired: boolean;
   paymentAmountCents: number;
   customValues: Array<{ customFieldId: string; value: Prisma.InputJsonValue }>;
+  addons: AddonSnapshot[];
 }) {
   if (!sessionId) throw new Error("Elegí una sesión");
 
@@ -330,12 +391,23 @@ async function createPublicSessionBooking({
         tenantId,
         bookingId: booking.id,
         action: "CREATED",
-        toState: { status: booking.status, origin: "PUBLIC", sessionId: session.id, partySize, paymentRequired },
+        toState: { status: booking.status, origin: "PUBLIC", sessionId: session.id, partySize, paymentRequired, addonIds: addons.map((addon) => addon.addonId) },
       },
     });
     if (customValues.length) {
-      await tx.customFieldValue.createMany({
-        data: customValues.map((entry) => ({ tenantId, bookingId: booking.id, customFieldId: entry.customFieldId, value: entry.value })),
+      await tx.customFieldValue.createMany({ data: customValues.map((entry) => ({ tenantId, bookingId: booking.id, customFieldId: entry.customFieldId, value: entry.value })) });
+    }
+    if (addons.length) {
+      await tx.bookingAddon.createMany({
+        data: addons.map((addon) => ({
+          tenantId,
+          bookingId: booking.id,
+          addonId: addon.addonId,
+          name: addon.name,
+          quantity: 1,
+          priceCents: addon.priceCents,
+          durationMinutes: 0,
+        })),
       });
     }
     return booking;
