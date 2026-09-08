@@ -329,12 +329,17 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
               {item.description && <p className="bw-svc-desc">{item.description}</p>}
               <div className="bw-svc-foot">
                 <span className="bw-svc-dur">
-                  <Clock3 size={14} /> {item.durationMinutes} min
+                  <Clock3 size={14} /> {item.durationMinutes} min{item.maxPartySize > 1 ? ` · hasta ${item.maxPartySize} pers.` : ""}
                 </span>
                 <span className="bw-svc-price">
                   {item.priceCents == null ? "A consultar" : money.format(item.priceCents / 100)}
                 </span>
               </div>
+              {policy.enabled && (
+                <div style={{ padding: "6px 16px 12px", fontSize: "0.72rem", color: "var(--brand)", fontWeight: 700 }}>
+                  {policy.mode === "FULL" ? "💳 Requiere pago online" : `💳 Seña requerida ${policy.percent ?? 30}%`}
+                </div>
+              )}
               {isSelected && <div className="bw-svc-check"><Check size={16} /></div>}
             </button>
           );
@@ -574,7 +579,7 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
   </div>;
 }
 
-function AvailabilityLoading() { return <div className="bw-loading"><span/><span/><span/><small>Buscando los mejores horarios disponibles…</small></div>; }
+function AvailabilityLoading() { return <div className="bw-loading"><div><span/><span/><span/></div><small>Buscando los mejores horarios disponibles…</small></div>; }
 
 function DynamicField({ field }: { field: CustomField }) {
   const name = `custom_${field.id}`;
