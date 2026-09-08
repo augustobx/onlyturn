@@ -6,5 +6,5 @@ import { SetupAwareContent } from "@/components/setup-aware-content";
 export default async function TenantLayout({ children }: { children: React.ReactNode }) {
   const { session, tenant } = await requireTenantSession();
   const pendingRegistrations = await platformDb.customerAccount.count({ where: { tenantId: tenant.id, status: "PENDING" } });
-  return <AppShell tenantName={tenant.name} userName={session.user.name} pendingRegistrations={pendingRegistrations}><SetupAwareContent>{children}</SetupAwareContent></AppShell>;
+  return <AppShell tenantName={tenant.name} tenantSlug={tenant.slug} userName={session.user.name} pendingRegistrations={pendingRegistrations}><SetupAwareContent>{children}</SetupAwareContent></AppShell>;
 }

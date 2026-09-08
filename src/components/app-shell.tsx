@@ -11,6 +11,7 @@ import {
   CalendarSync,
   ChevronDown,
   CircleHelp,
+  ExternalLink,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -65,7 +66,7 @@ const platformLinks: NavItem[] = [
   item("/superadmin/planes", "/superadmin/planes", "Planes", BriefcaseBusiness, "Define planes, límites y capacidades SaaS.", ["Revisá oferta vigente.", "Ajustá límites.", "Guardá cambios comerciales."]),
 ];
 
-export function AppShell({ children, tenantName, userName, superAdmin = false, pendingRegistrations = 0 }: { children: React.ReactNode; tenantName: string; userName: string; superAdmin?: boolean; pendingRegistrations?: number }) {
+export function AppShell({ children, tenantName, tenantSlug, userName, superAdmin = false, pendingRegistrations = 0 }: { children: React.ReactNode; tenantName: string; tenantSlug?: string; userName: string; superAdmin?: boolean; pendingRegistrations?: number }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -124,7 +125,33 @@ export function AppShell({ children, tenantName, userName, superAdmin = false, p
     </aside>
 
     <main className="main">
-      <header className="topbar"><div className="topbar-title"><button className="mobile-menu" aria-label="Abrir menú" onClick={() => setOpen(true)}><Menu size={20} /></button><div><span>{superAdmin ? "NanoLabs" : currentItem?.label ?? "OnlyTurn"}</span><strong>{tenantName}</strong></div></div><div className="topbar-actions">{!superAdmin && pendingCount > 0 && <Link className="pending-registration-alert" href="/clientes" aria-live="polite"><BellRing size={16}/><span><strong>{pendingCount}</strong> registro{pendingCount === 1 ? "" : "s"} nuevo{pendingCount === 1 ? "" : "s"}</span></Link>}{currentItem && <button className="module-help-trigger" type="button" onClick={() => setHelpOpen(true)} aria-label={`Ayuda de ${currentItem.label}`}><CircleHelp size={17} /><span>Ayuda</span></button>}<span className="system-status"><i /> Operativo</span></div></header>
+      <header className="topbar">
+        <div className="topbar-title">
+          <button className="mobile-menu" aria-label="Abrir menú" onClick={() => setOpen(true)}><Menu size={20} /></button>
+          <div>
+            <span>{superAdmin ? "NanoLabs" : currentItem?.label ?? "OnlyTurn"}</span>
+            <strong>{tenantName}</strong>
+          </div>
+        </div>
+        <div className="topbar-actions">
+          {!superAdmin && tenantSlug && (
+            <a
+              href={`/r/${tenantSlug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="module-help-trigger"
+              style={{ textDecoration: "none" }}
+              title="Abrir vista de reservas pública (PWA)"
+            >
+              <ExternalLink size={15} />
+              <span>Ver PWA</span>
+            </a>
+          )}
+          {!superAdmin && pendingCount > 0 && <Link className="pending-registration-alert" href="/clientes" aria-live="polite"><BellRing size={16}/><span><strong>{pendingCount}</strong> registro{pendingCount === 1 ? "" : "s"} nuevo{pendingCount === 1 ? "" : "s"}</span></Link>}
+          {currentItem && <button className="module-help-trigger" type="button" onClick={() => setHelpOpen(true)} aria-label={`Ayuda de ${currentItem.label}`}><CircleHelp size={17} /><span>Ayuda</span></button>}
+          <span className="system-status"><i /> Operativo</span>
+        </div>
+      </header>
       <div className="content">{children}</div>
     </main>
 

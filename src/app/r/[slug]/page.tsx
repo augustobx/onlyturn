@@ -1,6 +1,5 @@
-/* eslint-disable @next/next/no-img-element */
 import type { Metadata } from "next";
-import { CalendarDays, House, UserRound } from "lucide-react";
+import { BadgeCheck, CalendarDays, House, Sparkles, UserRound } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { getPublicCatalog, getPublicExperience, getPublicTenant } from "@/lib/booking-service";
 import { BookingWizard } from "./booking-wizard";
@@ -71,11 +70,30 @@ export default async function PublicBookingPage({ params }: { params: Promise<{ 
     } as React.CSSProperties}
   >
     <AnnouncementBoard businessName={tenant.name} notices={experience.announcements.map((item) => ({ id: item.id, title: item.title, body: item.body, style: item.style }))} />
-    <div className="public-hero" id="info"><div className="booking-wrap"><div className="public-brand-v2">
-      {branding.logoUrl ? <img src={branding.logoUrl} alt={`Logo de ${tenant.name}`} /> : <div className="logo">{tenant.name[0]}</div>}
-      <div><h1>{tenant.name}</h1><p>{branding.description ?? "Reservá tu turno en pocos minutos"}</p></div>
-      <a className="public-account-link" href={customerSession ? "/mi-cuenta" : "/cuenta"}>{customerSession ? `Hola, ${customerSession.account.customer.firstName}` : "Ingresar"}</a>
-    </div></div></div>
+    <div className="public-hero" id="info">
+      <div className="booking-wrap">
+        <div className="public-brand-v2">
+          {branding.logoUrl ? (
+            <img src={branding.logoUrl} alt={`Logo de ${tenant.name}`} className="brand-logo-img" />
+          ) : (
+            <div className="logo brand-logo-fallback">{tenant.name[0]}</div>
+          )}
+          <div className="brand-header-info">
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <h1>{tenant.name}</h1>
+              <span className="verified-business-badge" title="Negocio verificado en OnlyTurn">
+                <BadgeCheck size={18} />
+              </span>
+            </div>
+            <p>{branding.description ?? "Reservá tu turno online en simples pasos"}</p>
+          </div>
+          <a className="public-account-link" href={customerSession ? "/mi-cuenta" : "/cuenta"}>
+            <UserRound size={14} />
+            <span>{customerSession ? `Hola, ${customerSession.account.customer.firstName}` : "Ingresar"}</span>
+          </a>
+        </div>
+      </div>
+    </div>
     <div className="booking-wrap booking-content-v2" id="reservar">
       {registrationRequired ? (
         <section className="registration-welcome card">
