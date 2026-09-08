@@ -211,9 +211,9 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
 
   if (done) {
     return (
-      <div className="pwa-ticket">
-        <div className="pwa-ticket-head">
-          <div className="pwa-ticket-icon">
+      <div className="bw-ticket">
+        <div className="bw-ticket-head">
+          <div className="bw-ticket-icon">
             <Check size={32} />
           </div>
           <span className="eyebrow" style={{ color: "var(--brand)" }}>Reserva Confirmada</span>
@@ -222,31 +222,31 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
             Ya podés gestionarlo desde tu cuenta.
           </p>
         </div>
-        <div className="pwa-ticket-body">
-          <div className="pwa-ticket-row">
+        <div className="bw-ticket-body">
+          <div className="bw-ticket-row">
             <span>Servicio</span>
             <strong>{service?.name}</strong>
           </div>
           {selectedDate && (
-            <div className="pwa-ticket-row">
+            <div className="bw-ticket-row">
               <span>Fecha y hora</span>
               <strong>{new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short", timeZone: timezone }).format(new Date(selectedDate))}</strong>
             </div>
           )}
           {locationId && (
-            <div className="pwa-ticket-row">
+            <div className="bw-ticket-row">
               <span>Sede</span>
               <strong>{locations.find((l) => l.id === locationId)?.name}</strong>
             </div>
           )}
           {totalPriceCents > 0 && (
-            <div className="pwa-ticket-row">
+            <div className="bw-ticket-row">
               <span>Total</span>
               <strong style={{ color: "var(--brand)" }}>{money.format(totalPriceCents / 100)}</strong>
             </div>
           )}
         </div>
-        <div className="pwa-ticket-actions">
+        <div className="bw-ticket-actions">
           <a className="button" href="/mi-cuenta" style={{ width: "100%", justifyContent: "center" }}>
             Ver mis turnos en Mi Cuenta
           </a>
@@ -263,28 +263,28 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
     );
   }
 
-  return <div className="booking-flow pwa-booking-flow">
-    {error && <div className="pwa-error"><strong>No pudimos continuar</strong><span>{error}</span></div>}
+  return <div className="bw-flow">
+    {error && <div className="bw-error"><strong>No pudimos continuar</strong><span>{error}</span></div>}
 
     {/* Modern Stepper Indicator */}
-    <div className="pwa-stepper">
-      <div className={`pwa-step-item ${!service ? "active" : "done"}`}>
-        <span className="pwa-step-num">{service ? <Check size={12} /> : "1"}</span>
+    <div className="bw-stepper">
+      <div className={`bw-step ${!service ? "active" : "done"}`}>
+        <span className="bw-step-num">{service ? <Check size={12} /> : "1"}</span>
         <span>1. Servicio</span>
       </div>
-      <div className={`pwa-step-item ${service && !selectionReady ? "active" : selectionReady ? "done" : ""}`}>
-        <span className="pwa-step-num">{selectionReady ? <Check size={12} /> : "2"}</span>
+      <div className={`bw-step ${service && !selectionReady ? "active" : selectionReady ? "done" : ""}`}>
+        <span className="bw-step-num">{selectionReady ? <Check size={12} /> : "2"}</span>
         <span>2. Horario</span>
       </div>
-      <div className={`pwa-step-item ${selectionReady ? "active" : ""}`}>
-        <span className="pwa-step-num">3</span>
+      <div className={`bw-step ${selectionReady ? "active" : ""}`}>
+        <span className="bw-step-num">3</span>
         <span>3. Confirmar</span>
       </div>
     </div>
 
-    <section className="booking-selection card">
-      <div className="booking-section-title">
-        <span className="selection-number">1</span>
+    <section className="bw-section bw-card">
+      <div className="bw-section-title">
+        <span className="bw-num">1</span>
         <div>
           <h2>¿Qué querés reservar?</h2>
           <p className="muted">Elegí la sede y el servicio. OnlyTurn se ocupa de cruzar la disponibilidad.</p>
@@ -293,8 +293,8 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
 
       {locations.length > 1 && (
         <>
-          <span className="pwa-mini-title"><MapPin size={14}/> Sede de atención</span>
-          <div className="choice-chips">
+          <span className="bw-label"><MapPin size={14}/> Sede de atención</span>
+          <div className="bw-chips">
             {locations.map((item) => (
               <button type="button" className={locationId === item.id ? "active" : ""} onClick={() => chooseLocation(item.id)} key={item.id}>
                 <strong>{item.name}</strong>
@@ -306,56 +306,44 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
       )}
 
       {locations.length === 1 && (
-        <div className="single-location">
+        <div className="bw-single-loc">
           <MapPin size={15}/>
           <span><strong>{locations[0].name}</strong>{locations[0].address && <small>{locations[0].address}</small>}</span>
         </div>
       )}
 
-      <div className={`service-cards ${locationId ? "" : "locked-choice"}`} ref={serviceRef}>
-        {locationId && !locationServices.length && <div className="empty" style={{ gridColumn: "1/-1" }}>Esta sede todavía no tiene opciones disponibles online.</div>}
+      <div className={`bw-services ${locationId ? "" : "bw-locked"}`} ref={serviceRef}>
+        {locationId && !locationServices.length && <div className="bw-empty" style={{ gridColumn: "1/-1" }}>Esta sede todavía no tiene opciones disponibles online.</div>}
         {categories.flatMap((category) => locationServices.filter((item) => (item.category || "General") === category).map((item) => {
           const isSelected = serviceId === item.id;
           const policy = (item.depositPolicy ?? {}) as { enabled?: boolean; mode?: string; percent?: number };
           return (
             <button
               type="button"
-              className={`service-card-modern ${isSelected ? "active" : ""}`}
+              className={`bw-svc ${isSelected ? "active" : ""}`}
               onClick={() => chooseService(item.id)}
               key={item.id}
             >
-              <div className="service-card-head">
-                <span className="service-category-tag" style={{ borderLeft: `3px solid ${item.color || "var(--brand)"}` }}>
-                  {category} · {bookingTypeLabel[item.bookingType]}
+              <span className="bw-svc-cat">{category}</span>
+              <h3 className="bw-svc-title">{item.name}</h3>
+              {item.description && <p className="bw-svc-desc">{item.description}</p>}
+              <div className="bw-svc-foot">
+                <span className="bw-svc-dur">
+                  <Clock3 size={14} /> {item.durationMinutes} min
                 </span>
-                <span className="service-check-indicator">
-                  <Check size={13} />
-                </span>
-              </div>
-              <h3 className="service-title">{item.name}</h3>
-              {item.description && <p className="service-desc">{item.description}</p>}
-              <div className="service-card-foot">
-                <span className="service-duration-badge">
-                  <Clock3 size={13} />
-                  {item.durationMinutes} min{item.maxPartySize > 1 ? ` · hasta ${item.maxPartySize} pers.` : ""}
-                </span>
-                <span className="service-price-pill">
+                <span className="bw-svc-price">
                   {item.priceCents == null ? "A consultar" : money.format(item.priceCents / 100)}
                 </span>
               </div>
-              {policy.enabled && (
-                <div style={{ marginTop: 8, fontSize: "0.72rem", color: "var(--brand)", fontWeight: 700 }}>
-                  {policy.mode === "FULL" ? "Requiere pago online" : `Seña requerida ${policy.percent ?? 30}%`}
-                </div>
-              )}
+              {isSelected && <div className="bw-svc-check"><Check size={16} /></div>}
             </button>
           );
         }))}
       </div>
 
       {service && !isSessionType && (service.professionalMode !== "NONE" || service.resourceMode !== "NONE") && (
-        <div className="assignment-row">
-          <div className="assignment-intro">
+        <div className="bw-assign">
+          <div className="bw-assign-intro">
             <UserRound size={16}/>
             <span><strong>Preferencia de atención</strong><small>Si no elegís una preferencia, OnlyTurn puede asignar automáticamente cuando el servicio lo permite.</small></span>
           </div>
@@ -381,19 +369,19 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
       )}
 
       {service?.addons.length ? (
-        <div className="pwa-addons">
-          <div className="section-head">
+        <div className="bw-addons">
+          <div className="bw-addon-head">
             <div>
-              <span className="pwa-mini-title"><Sparkles size={14}/> Extras</span>
+              <span className="bw-label"><Sparkles size={14}/> Extras</span>
               <h3>¿Querés agregar algo?</h3>
             </div>
             <span className="muted">Opcional</span>
           </div>
-          <div className="option-grid">
+          <div className="bw-addon-grid">
             {service.addons.map((addon) => {
               const selected = addonIds.includes(addon.id);
               return (
-                <label className={`option ${selected ? "active" : ""}`} key={addon.id}>
+                <label className={`bw-addon ${selected ? "active" : ""}`} key={addon.id}>
                   <span>
                     <strong>{addon.name}</strong>
                     {addon.description && <small>{addon.description}</small>}
@@ -405,7 +393,7 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
             })}
           </div>
           {selectedAddons.length > 0 && (
-            <div className="addon-summary">
+            <div className="bw-addon-sum">
               Extras seleccionados: <strong>{money.format(addonPriceCents / 100)}</strong>{!isSessionType && addonDuration ? ` · +${addonDuration} min` : ""}
             </div>
           )}
@@ -413,9 +401,9 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
       ) : null}
     </section>
 
-    <section className={`booking-time card guided-section ${service ? "ready" : "locked"}`} ref={timeRef}>
-      <div className="booking-section-title">
-        <span className="selection-number">2</span>
+    <section className={`bw-section bw-card bw-guided ${service ? "bw-ready" : "bw-locked-section"}`} ref={timeRef}>
+      <div className="bw-section-title">
+        <span className="bw-num">2</span>
         <div>
           <h2>{isSessionType ? "Elegí una fecha" : "¿Cuándo te queda bien?"}</h2>
           <p className="muted">{isSessionType ? "Mostramos sólo sesiones con cupo real." : "Los horarios que ves ya están libres; no necesitás comprobar nada más."}</p>
@@ -423,14 +411,14 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
       </div>
       {isSessionType ? <>
         {loadingAvailability && <AvailabilityLoading />}
-        {!loadingAvailability && sessions.length > 0 && <div className="session-list">{sessions.map((item) => { const full = item.available < (service?.minPartySize ?? 1); return <button type="button" disabled={full} className={sessionId === item.id ? "active" : ""} onClick={() => chooseSession(item.id)} key={item.id}><span className="session-date"><strong>{new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "short", timeZone: timezone }).format(new Date(item.startsAt))}</strong><small>{new Intl.DateTimeFormat("es-AR", { weekday: "short", timeZone: timezone }).format(new Date(item.startsAt))}</small></span><span><strong>{item.title || service?.name}</strong><small><Clock3 size={12}/>{timeLabel(item.startsAt, timezone)} · {item.professional?.name || item.resource?.name || "Sesión"}</small></span><b>{full ? "Completo" : `${item.available} libres`}</b></button>; })}</div>}
-        {!loadingAvailability && !sessions.length && <div className="empty">No hay próximas sesiones publicadas con disponibilidad.</div>}
+        {!loadingAvailability && sessions.length > 0 && <div className="bw-sessions">{sessions.map((item) => { const full = item.available < (service?.minPartySize ?? 1); return <button type="button" disabled={full} className={sessionId === item.id ? "active" : ""} onClick={() => chooseSession(item.id)} key={item.id}><span className="bw-session-date"><strong>{new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "short", timeZone: timezone }).format(new Date(item.startsAt))}</strong><small>{new Intl.DateTimeFormat("es-AR", { weekday: "short", timeZone: timezone }).format(new Date(item.startsAt))}</small></span><span><strong>{item.title || service?.name}</strong><small><Clock3 size={12}/>{timeLabel(item.startsAt, timezone)} · {item.professional?.name || item.resource?.name || "Sesión"}</small></span><b>{full ? "Completo" : `${item.available} libres`}</b></button>; })}</div>}
+        {!loadingAvailability && !sessions.length && <div className="bw-empty">No hay próximas sesiones publicadas con disponibilidad.</div>}
         {!loadingAvailability && service?.allowWaitlist && !sessions.length && <WaitlistForm slug={slug} locationId={locationId} serviceId={service.id} minPartySize={service.minPartySize} maxPartySize={service.maxPartySize} customer={customer} />}
         {!loadingAvailability && service?.allowWaitlist && fullSessions.map((item) => <WaitlistForm key={item.id} slug={slug} locationId={locationId} serviceId={service.id} sessionId={item.id} minPartySize={service.minPartySize} maxPartySize={Math.max(service.minPartySize, service.maxPartySize)} customer={customer} />)}
       </> : <>
-        <div className="date-navigation">
+        <div className="bw-date-nav">
           <button type="button" disabled={!service} onClick={() => setWeekStart(addUtcDays(weekStart, -7))} aria-label="Semana anterior"><ChevronLeft/></button>
-          <div className="date-strip">
+          <div className="bw-dates">
             {days.map((item) => {
               const value = new Date(`${item}T12:00:00Z`);
               return (
@@ -451,21 +439,21 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
           <button type="button" disabled={!service} onClick={() => setWeekStart(addUtcDays(weekStart, 7))} aria-label="Semana siguiente"><ChevronRight/></button>
         </div>
 
-        <div className="selected-day-line">
+        <div className="bw-day-line">
           <CalendarDays size={15}/>
           <strong>{dateLabel(date)}</strong>
           <input type="date" value={date} min={initialDate} onChange={(event) => { setDate(event.target.value); setWeekStart(event.target.value); setSlot(""); }} />
         </div>
 
         {loadingAvailability ? <AvailabilityLoading /> : slots.length > 0 ? (
-          <div className="time-periods">
+          <div className="bw-times">
             {slotGroups.map((group) => (
               <section key={group.key}>
-                <div className="time-period-header">
+                <div className="bw-time-header">
                   <span>{group.key === "morning" ? "🌅 Mañana" : group.key === "afternoon" ? "☀️ Tarde" : "🌙 Noche"}</span>
                   <small>{group.slots.length} horario{group.slots.length === 1 ? "" : "s"}</small>
                 </div>
-                <div className="time-groups">
+                <div className="bw-slots">
                   {group.slots.map((value) => (
                     <button type="button" className={slot === value ? "active" : ""} onClick={() => chooseSlot(value)} key={value}>
                       {timeLabel(value, timezone)}
@@ -476,13 +464,13 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
             ))}
           </div>
         ) : assignmentReady ? (
-          <div className="no-slot-state">
-            <span className="no-slot-icon"><CalendarDays size={20} /></span>
+          <div className="bw-no-slots">
+            <span className="bw-no-slots-icon"><CalendarDays size={20} /></span>
             <h3>No hay lugar el {dateLabel(date, "short")}</h3>
             <p>Buscamos automáticamente las próximas fechas disponibles para este servicio.</p>
             {nextAvailability.length > 0 ? (
-              <div className="next-availability">
-                <span className="pwa-mini-title"><Sparkles size={14}/> Próximos disponibles</span>
+              <div className="bw-next-avail">
+                <span className="bw-label"><Sparkles size={14}/> Próximos disponibles</span>
                 {nextAvailability.map((day) => (
                   <button type="button" onClick={() => chooseNextDay(day.date)} key={day.date}>
                     <span>
@@ -498,7 +486,7 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
             )}
           </div>
         ) : (
-          <div className="empty">Completá las selecciones requeridas para consultar disponibilidad.</div>
+          <div className="bw-empty">Completá las selecciones requeridas para consultar disponibilidad.</div>
         )}
 
         {!loadingAvailability && assignmentReady && !slots.length && service?.allowWaitlist && (
@@ -507,9 +495,9 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
       </>}
     </section>
 
-    <section className={`booking-details card guided-section ${selectionReady ? "ready" : "locked"}`} ref={detailsRef}>
-      <div className="booking-section-title">
-        <span className="selection-number">3</span>
+    <section className={`bw-section bw-card bw-guided ${selectionReady ? "bw-ready" : "bw-locked-section"}`} ref={detailsRef}>
+      <div className="bw-section-title">
+        <span className="bw-num">3</span>
         <div>
           <h2>Confirmá tu reserva</h2>
           <p className="muted">{selectedDate ? new Intl.DateTimeFormat("es-AR", { dateStyle: "full", timeStyle: "short", timeZone: timezone }).format(new Date(selectedDate)) : "Primero elegí una fecha y horario"}</p>
@@ -538,7 +526,7 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
             </div>
           )}
 
-          <div className="customer-grid">
+          <div className="bw-form-grid">
             <div className="field">
               <label>Nombre *</label>
               <input className="input" name="firstName" autoComplete="given-name" defaultValue={customer?.firstName} required />
@@ -559,10 +547,10 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
 
           {service.customFields.map((field) => <DynamicField key={field.id} field={field} />)}
 
-          <p className="muted booking-policy">{cancellationHours > 0 ? `Podés solicitar cancelaciones o cambios con al menos ${cancellationHours} horas de anticipación.` : "Consultá al negocio por cancelaciones o cambios."}</p>
+          <p className="muted bw-policy">{cancellationHours > 0 ? `Podés solicitar cancelaciones o cambios con al menos ${cancellationHours} horas de anticipación.` : "Consultá al negocio por cancelaciones o cambios."}</p>
 
           {(service.priceCents != null || addonPriceCents > 0) && (
-            <div className="payment-callout">
+            <div className="bw-payment">
               <strong>{selectedPackage ? `Usando ${selectedPackage.name}` : "Total"}</strong>
               <span>{selectedPackage ? `${partySize} uso${partySize === 1 ? "" : "s"}` : money.format(totalPriceCents / 100)}</span>
               {selectedPackage && <small>{addonPriceCents > 0 ? `Extras a pagar: ${money.format(addonPriceCents / 100)}.` : "El servicio queda cubierto por tu membresía."}</small>}
@@ -570,14 +558,14 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
           )}
 
           {paymentPolicy.enabled && payablePriceCents > 0 && (
-            <div className="payment-callout payment-online">
+            <div className="bw-payment bw-payment-online">
               <strong>{paymentPolicy.mode === "FULL" ? "Pago para confirmar" : "Seña para confirmar"}</strong>
               <span>{money.format(paymentTotal)}</span>
               <small>Al confirmar te llevamos a Mercado Pago para abonar de forma segura.</small>
             </div>
           )}
 
-          <button className="button confirm-booking" disabled={pending}>
+          <button className="button bw-confirm" disabled={pending}>
             {pending ? "Confirmando tu reserva…" : paymentPolicy.enabled && payablePriceCents > 0 ? "Reservar y pagar con Mercado Pago" : selectedPackage ? `Confirmar con ${selectedPackage.name}` : "Confirmar reserva"}
           </button>
         </form>
@@ -586,7 +574,7 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
   </div>;
 }
 
-function AvailabilityLoading() { return <div className="availability-loading"><span/><span/><span/><small>Buscando los mejores horarios disponibles…</small></div>; }
+function AvailabilityLoading() { return <div className="bw-loading"><span/><span/><span/><small>Buscando los mejores horarios disponibles…</small></div>; }
 
 function DynamicField({ field }: { field: CustomField }) {
   const name = `custom_${field.id}`;
