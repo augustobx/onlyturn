@@ -204,6 +204,11 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
     });
   }
 
+  const selectedDate = isSessionType ? selectedSession?.startsAt : slot;
+  const totalPriceCents = (service?.priceCents ?? 0) * partySize + addonPriceCents;
+  const payablePriceCents = selectedPackage ? addonPriceCents : totalPriceCents;
+  const paymentTotal = (payablePriceCents / 100) * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100);
+
   if (done) {
     return (
       <div className="pwa-ticket">
@@ -257,11 +262,6 @@ export function BookingWizard({ slug, currency, timezone, cancellationHours, loc
       </div>
     );
   }
-
-  const selectedDate = isSessionType ? selectedSession?.startsAt : slot;
-  const totalPriceCents = (service?.priceCents ?? 0) * partySize + addonPriceCents;
-  const payablePriceCents = selectedPackage ? addonPriceCents : totalPriceCents;
-  const paymentTotal = (payablePriceCents / 100) * (paymentPolicy.mode === "FULL" ? 1 : (paymentPolicy.percent ?? 30) / 100);
 
   return <div className="booking-flow pwa-booking-flow">
     {error && <div className="pwa-error"><strong>No pudimos continuar</strong><span>{error}</span></div>}
