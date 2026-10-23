@@ -28,4 +28,21 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - name: Validate Hub integration scope in Compose (no database access)
+        env:
+          POSTGRES_PASSWORD: ci_only_secret
+          NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          AUTOMATION_CRON_SECRET: ci_only_automation
+          CALENDAR_FEED_SECRET: ci_only_calendar
+          HUB_INTEGRATION_TOKEN: ci_test_only_token_32_bytes_long_123456
+        run: |
+          docker compose -f docker-compose.yml config --format json > /tmp/onlyturn-compose.json
+          python3 - <<'PY'
+          import json
+          services=json.load(open("/tmp/onlyturn-compose.json"))["services"]
+          assert services["app"]["environment"].get("HUB_INTEGRATION_TOKEN") == "ci_test_only_token_32_bytes_long_123456"
+          for name in ("db","migrate","automation-worker"):
+              assert "HUB_INTEGRATION_TOKEN" not in services[name].get("environment",{}), name
+          print("OnlyTurn integration token scoped to app; migrator and DB excluded")
+          PY
       - run: npm run build
