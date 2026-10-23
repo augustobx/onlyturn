@@ -35,14 +35,21 @@ jobs:
           AUTOMATION_CRON_SECRET: ci_only_automation
           CALENDAR_FEED_SECRET: ci_only_calendar
           HUB_INTEGRATION_TOKEN: ci_test_only_token_32_bytes_long_123456
+          HUB_MANAGEMENT_ENABLED: "true"
+          HUB_MANAGEMENT_TOKEN: ci_management_fixture_key_32_bytes_long_123456
         run: |
           docker compose -f docker-compose.yml config --format json > /tmp/onlyturn-compose.json
           python3 - <<'PY'
           import json
           services=json.load(open("/tmp/onlyturn-compose.json"))["services"]
           assert services["app"]["environment"].get("HUB_INTEGRATION_TOKEN") == "ci_test_only_token_32_bytes_long_123456"
+          assert services["app"]["environment"].get("HUB_MANAGEMENT_TOKEN") == "ci_management_fixture_key_32_bytes_long_123456"
           for name in ("db","migrate","automation-worker"):
               assert "HUB_INTEGRATION_TOKEN" not in services[name].get("environment",{}), name
+              assert "HUB_MANAGEMENT_TOKEN" not in services[name].get("environment",{}), name
+              assert "HUB_MANAGEMENT_ENABLED" not in services[name].get("environment",{}), name
+          assert not services["app"]["build"].get("args"), "No production secrets in build arguments"
           print("OnlyTurn integration token scoped to app; migrator and DB excluded")
           PY
       - run: npm run build
+

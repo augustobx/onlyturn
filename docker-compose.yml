@@ -30,8 +30,6 @@ services:
     build:
       context: .
       target: migrator
-      args:
-        NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?NEXT_SERVER_ACTIONS_ENCRYPTION_KEY is required}
     container_name: onlyturn-migrate
     restart: "no"
     environment:
@@ -48,8 +46,6 @@ services:
   app:
     build:
       context: .
-      args:
-        NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?NEXT_SERVER_ACTIONS_ENCRYPTION_KEY is required}
     container_name: onlyturn-web
     restart: unless-stopped
     init: true
@@ -60,6 +56,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-onlyturn}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-onlyturn}?schema=public
       # Only the public web app reads this credential; never the migrator/worker.
       HUB_INTEGRATION_TOKEN: ${HUB_INTEGRATION_TOKEN:-}
+      HUB_MANAGEMENT_ENABLED: ${HUB_MANAGEMENT_ENABLED:-false}
+      HUB_MANAGEMENT_TOKEN: ${HUB_MANAGEMENT_TOKEN:-}
       APP_BASE_URL: ${APP_BASE_URL:-https://onlyturn.nanoapps.ar}
       APP_BASE_DOMAIN: ${APP_BASE_DOMAIN:-nanoapps.ar}
       PLATFORM_HOST: ${PLATFORM_HOST:-onlyturn.nanoapps.ar}
@@ -138,3 +136,4 @@ networks:
   proxy:
     name: proxy
     external: true
+
