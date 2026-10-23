@@ -58,6 +58,8 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
       DATABASE_URL: postgresql://${POSTGRES_USER:-onlyturn}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-onlyturn}?schema=public
+      # Only the public web app reads this credential; never the migrator/worker.
+      HUB_INTEGRATION_TOKEN: ${HUB_INTEGRATION_TOKEN:-}
       APP_BASE_URL: ${APP_BASE_URL:-https://onlyturn.nanoapps.ar}
       APP_BASE_DOMAIN: ${APP_BASE_DOMAIN:-nanoapps.ar}
       PLATFORM_HOST: ${PLATFORM_HOST:-onlyturn.nanoapps.ar}
