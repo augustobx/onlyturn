@@ -6,7 +6,8 @@ const id = z.string().trim().min(1).max(191);
 const version = z.iso.datetime();
 const tenant = { tenantId: id, version };
 const name = z.string().trim().min(2).max(100);
-const slug = z.string().min(3).max(63).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+// Native tenant provisioning permits short labels; existing identifiers must remain editable.
+const slug = z.string().min(1).max(63).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const password = z.string().min(12).max(128);
 const modules = z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9]{0,40}$/), z.boolean());
 const limits = z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9]{0,40}$/), z.number().int().min(1).max(10_000_000));

@@ -70,6 +70,13 @@ describe("Hub management boundary", () => {
   });
 });
 describe("control plane validation", () => {
+  it("accepts existing short tenant labels while rejecting invalid host labels", () => {
+    const command = { ...JSON.parse(body()), operation: "tenant.update", input: { tenantId: "fixture", version: "2026-01-01T00:00:00.000Z", name: "Existing business", slug: "qa" } };
+    expect(commandSchema.safeParse(command).success).toBe(true);
+    for (const slug of ["", "-qa", "qa-", "qa.example", "QA"]) {
+      expect(commandSchema.safeParse({ ...command, input: { ...command.input, slug } }).success).toBe(false);
+    }
+  });
   it("requires valid dates and explicit renewal of expired subscriptions", () => {
     expect(() => requirePeriod(new Date("2025-01-01"), new Date("2025-02-01"), true)).toThrow(ManagementError);
     expect(() => requirePeriod(new Date("2025-01-01"), new Date("2025-02-01"), false)).not.toThrow();

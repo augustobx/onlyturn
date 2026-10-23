@@ -91,6 +91,8 @@ let plans = await read("plans"), existing = plans.items.find(p => p.id === planI
 await send(command("plan.update", { planId, version: existing.version, name: "QA plan retired", description: plan.description, priceCents: 12000, currency: "ARS", active: false, modules, limits }));
 await send(command("tenant.create", createInput("inactive-plan")), 422);
 check((await read("tenant", { tenantId: a })).plan.active === false, "retired plan retained for existing subscription");
+await update("tenant.update", b, { name: tb.name, slug: "qa" });
+check((await read("tenant", { tenantId: b })).slug === "qa", "native short tenant label remains manageable");
 const audit = await read("audit", { tenantId: a });
 check(audit.items.length > 0 && audit.items.every(e => e.tenantId === a), "tenant-scoped audit");
 check(!JSON.stringify(audit).includes(nextPassword) && !JSON.stringify(audit).includes(key), "no secrets in audit response");
