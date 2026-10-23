@@ -30,7 +30,9 @@ export async function GET(req: Request) {
     const records = await platformDb.tenant.findMany({
       skip: offset, take: 101,
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      select: { id:true,slug:true,name:true,status:true,createdAt:true },
+      select: { id:true,slug:true,name:true,status:true,createdAt:true,updatedAt:true,
+        subscriptions:{orderBy:[{createdAt:"desc"},{id:"desc"}],take:1,select:{currentPeriodEnd:true,plan:{select:{name:true,features:true}}}},
+        featureOverrides:{select:{key:true,enabled:true}},_count:{select:{bookings:true}} },
     });
     const page = records.slice(0, 100).map(t => ({
       id: String(t.id),
@@ -39,7 +41,14 @@ export async function GET(req: Request) {
       status: normalizeStatus(t.status),
       rawStatus: String(t.status),
       createdAt: t.createdAt.toISOString(),
-      plan: null,
+      plan: t.subscriptions[0]?.plan.name ?? null,
+      version: t.updatedAt.toISOString(),
+      planExpiresAt: t.subscriptions[0]?.currentPeriodEnd.toISOString() ?? null,
+      modules: Object.fromEntries(["whatsappNotifications","advancedReports","customDomain","waitlist","deposits","recurringBookings"].map(key=>{
+        const override=t.featureOverrides.find(o=>o.key===key),base=t.subscriptions[0]?.plan.features as Record<string,unknown>|undefined;
+        return [key,override?.enabled ?? base?.[key]===true];
+      })),
+      metrics: { totalRecords:t._count.bookings,recordLabel:"reservas",available:true },
     }));
     return Response.json({
       success: true,
@@ -55,3 +64,4 @@ export async function GET(req: Request) {
     return Response.json({ success: false, error: "Tenant read unavailable" }, { status: 503, headers: HEADER });
   }
 }
+
